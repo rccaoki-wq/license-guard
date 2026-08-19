@@ -1,0 +1,26 @@
+{
+  "name": "license-guard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "smoke": "tsx scripts/smoke.ts",
+    "db:migrate:local": "wrangler d1 migrations apply license-guard --local",
+    "db:migrate": "wrangler d1 migrations apply license-guard --remote"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "spdx-expression-parse": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240909.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^3.78.0"
+  }
+}
