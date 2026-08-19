@@ -1,0 +1,60 @@
+/** PyPI trove classifier → SPDX 識別子 */
+const CLASSIFIER_TO_SPDX: Record<string, string> = {
+  'MIT License': 'MIT',
+  'MIT No Attribution License (MIT-0)': 'MIT-0',
+  'Apache Software License': 'Apache-2.0',
+  'BSD License': 'BSD-3-Clause',
+  'ISC License (ISCL)': 'ISC',
+  'GNU General Public License v2 (GPLv2)': 'GPL-2.0-only',
+  'GNU General Public License v3 (GPLv3)': 'GPL-3.0-only',
+  'GNU General Public License v2 or later (GPLv2+)': 'GPL-2.0-or-later',
+  'GNU General Public License v3 or later (GPLv3+)': 'GPL-3.0-or-later',
+  'GNU Lesser General Public License v2 (LGPLv2)': 'LGPL-2.0-only',
+  'GNU Lesser General Public License v3 (LGPLv3)': 'LGPL-3.0-only',
+  'GNU Affero General Public License v3': 'AGPL-3.0-only',
+  'GNU Affero General Public License v3 or later (AGPL v3+)': 'AGPL-3.0-or-later',
+  'Mozilla Public License 2.0 (MPL 2.0)': 'MPL-2.0',
+  'Eclipse Public License 2.0 (EPL-2.0)': 'EPL-2.0',
+  'The Unlicense (Unlicense)': 'Unlicense',
+  'Python Software Foundation License': 'Python-2.0',
+  'zlib/libpng License': 'Zlib',
+};
+
+/** SPDX 識別子として妥当な形をしているか（自由記述の除外用） */
+const SPDX_SHAPE = /^[A-Za-z0-9.+-]+$/;
+
+interface PypiDoc {
+  info?: { license?: string; classifiers?: string[] };
+}
+
+export async function fetchPypiLicense(
+  name: string,
+  version: string | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string | null> {
+  const url =
+    version === null
+      ? `https://pypi.org/pypi/${encodeURIComponent(name)}/json`
+      : `https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version)}/json`;
+
+  let doc: PypiDoc;
+  try {
+    const res = await fetchImpl(url);
+    if (!res.ok) return null;
+    doc = (await res.json()) as PypiDoc;
+  } catch {
+    return null;
+  }
+
+  // classifiers は構造化されており、自由記述の info.license より信頼できる
+  for (const c of doc.info?.classifiers ?? []) {
+    const tail = c.replace(/^License :: (OSI Approved :: )?/, '');
+    const spdx = CLASSIFIER_TO_SPDX[tail];
+    if (spdx) return spdx;
+  }
+
+  const raw = doc.info?.license?.trim();
+  if (raw && SPDX_SHAPE.test(raw)) return raw;
+
+  return null;
+}
