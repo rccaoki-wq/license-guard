@@ -6,6 +6,24 @@ function mockFetch(body: unknown, ok = true) {
 }
 
 describe('fetchPypiLicense', () => {
+  it('PEP 639 の license_expression を最優先する', async () => {
+    // Flask など最新パッケージは classifiers を持たず license_expression のみを持つ
+    const f = mockFetch({
+      info: { license: null, license_expression: 'BSD-3-Clause', classifiers: [] },
+    });
+    expect(await fetchPypiLicense('flask', null, f)).toBe('BSD-3-Clause');
+  });
+
+  it('license_expression は classifiers より優先される', async () => {
+    const f = mockFetch({
+      info: {
+        license_expression: 'Apache-2.0',
+        classifiers: ['License :: OSI Approved :: MIT License'],
+      },
+    });
+    expect(await fetchPypiLicense('foo', '1.0.0', f)).toBe('Apache-2.0');
+  });
+
   it('classifiers を info.license より優先する', async () => {
     const f = mockFetch({
       info: {

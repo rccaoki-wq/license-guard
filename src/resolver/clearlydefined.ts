@@ -1,3 +1,5 @@
+import { fetchJson } from './http';
+
 /**
  * Go モジュールパスを ClearlyDefined の座標 (type/provider/namespace/name/revision)
  * に変換する。namespace 内のスラッシュはエンコードが必要。
@@ -13,6 +15,13 @@ interface ClearlyDefinedDoc {
   licensed?: { declared?: string };
 }
 
+/**
+ * ClearlyDefined から Go モジュールのライセンスを取得する。
+ *
+ * 未ハーベストの座標は初回要求時にその場でハーベストされるため応答が
+ * 極めて遅くなる場合がある。fetchJson のタイムアウトにより null に落ち、
+ * 次回以降はキャッシュ済みの定義が高速に返る。
+ */
 export async function fetchGoLicense(
   modulePath: string,
   version: string | null,
@@ -22,14 +31,8 @@ export async function fetchGoLicense(
 
   const url = `https://api.clearlydefined.io/definitions/${toGoCoordinates(modulePath, version)}`;
 
-  let doc: ClearlyDefinedDoc;
-  try {
-    const res = await fetchImpl(url);
-    if (!res.ok) return null;
-    doc = (await res.json()) as ClearlyDefinedDoc;
-  } catch {
-    return null;
-  }
+  const doc = await fetchJson<ClearlyDefinedDoc>(url, fetchImpl);
+  if (doc === null) return null;
 
   const declared = doc.licensed?.declared?.trim();
   if (!declared || declared === 'NOASSERTION') return null;

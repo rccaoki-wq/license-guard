@@ -1,3 +1,5 @@
+import { fetchJson } from './http';
+
 /** PyPI trove classifier → SPDX 識別子 */
 const CLASSIFIER_TO_SPDX: Record<string, string> = {
   'MIT License': 'MIT',
@@ -24,7 +26,12 @@ const CLASSIFIER_TO_SPDX: Record<string, string> = {
 const SPDX_SHAPE = /^[A-Za-z0-9.+-]+$/;
 
 interface PypiDoc {
-  info?: { license?: string; classifiers?: string[] };
+  info?: {
+    license?: string | null;
+    /** PEP 639 で導入された正式な SPDX 式フィールド */
+    license_expression?: string | null;
+    classifiers?: string[];
+  };
 }
 
 export async function fetchPypiLicense(
@@ -37,14 +44,13 @@ export async function fetchPypiLicense(
       ? `https://pypi.org/pypi/${encodeURIComponent(name)}/json`
       : `https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version)}/json`;
 
-  let doc: PypiDoc;
-  try {
-    const res = await fetchImpl(url);
-    if (!res.ok) return null;
-    doc = (await res.json()) as PypiDoc;
-  } catch {
-    return null;
-  }
+  const doc = await fetchJson<PypiDoc>(url, fetchImpl);
+  if (doc === null) return null;
+
+  // PEP 639 の license_expression は正式な SPDX 式であり最も信頼できる。
+  // Flask のような最新パッケージは classifiers を持たずこのフィールドのみを持つ。
+  const expression = doc.info?.license_expression?.trim();
+  if (expression) return expression;
 
   // classifiers は構造化されており、自由記述の info.license より信頼できる
   for (const c of doc.info?.classifiers ?? []) {

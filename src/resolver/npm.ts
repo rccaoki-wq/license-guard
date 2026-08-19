@@ -1,3 +1,5 @@
+import { fetchJson } from './http';
+
 interface NpmVersionDoc {
   license?: string | { type?: string };
   licenses?: Array<{ type?: string }>;
@@ -34,14 +36,8 @@ export async function fetchNpmLicense(
 ): Promise<string | null> {
   const url = `https://registry.npmjs.org/${encodeURIComponent(name)}`;
 
-  let doc: NpmPackageDoc;
-  try {
-    const res = await fetchImpl(url);
-    if (!res.ok) return null;
-    doc = (await res.json()) as NpmPackageDoc;
-  } catch {
-    return null;
-  }
+  const doc = await fetchJson<NpmPackageDoc>(url, fetchImpl);
+  if (doc === null) return null;
 
   const target = version ?? doc['dist-tags']?.latest;
   if (!target) return null;
