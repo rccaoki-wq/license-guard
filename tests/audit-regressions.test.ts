@@ -36,12 +36,18 @@ const noopCache: CacheLike = {
 };
 
 describe('監査#3 照会が必要な依存数の上限', () => {
-  it('上限を超えるマニフェストを黙って切り詰めず拒否する', () => {
+  it('上限を超えても黙って切り詰めず、未確認として明示する', async () => {
     const deps: Record<string, string> = {};
     for (let i = 0; i <= MAX_LOOKUPS; i++) deps[`pkg-${i}`] = '1.0.0';
-    expect(() => detectAndParse(JSON.stringify({ dependencies: deps }))).toThrow(
-      /above the limit/,
-    );
+    const r = await scan(JSON.stringify({ dependencies: deps }), 'saas', noopCache, {
+      npm: async () => ({ spdx: 'MIT' }),
+      pypi: async () => ({ spdx: null }),
+      go: async () => ({ spdx: null }),
+    });
+    // 全件が結果に含まれ、未確認分は allowed でなく review になる
+    expect(r.summary.total).toBe(MAX_LOOKUPS + 1);
+    expect(r.findings.filter((f) => f.resolvedFrom === 'not-checked').length).toBe(1);
+    expect(r.limitations.some((l) => l.includes('were not checked'))).toBe(true);
   });
 
   it('上限ちょうどは通す', () => {
@@ -62,23 +68,9 @@ describe('監査#3 照会が必要な依存数の上限', () => {
     expect(parsed.dependencies).toHaveLength(MAX_LOOKUPS * 5);
   });
 
-  it('/api/scan は上限超過を 400 で返す', async () => {
-    const deps: Record<string, string> = {};
-    for (let i = 0; i <= MAX_LOOKUPS; i++) deps[`pkg-${i}`] = '1.0.0';
-    const res = await app.request(
-      '/api/scan',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          content: JSON.stringify({ dependencies: deps }),
-          distributionModel: 'saas',
-        }),
-      },
-      fakeEnv(),
-    );
-    expect(res.status).toBe(400);
-  });
+  // アプリ層で同じ検証をすると実レジストリへ 200 回問い合わせることになり、
+  // オフラインで走らない。ふるまいは scan 層（tests/partial-scan.test.ts）で
+  // フェッチャを差し替えて検証している。
 });
 
 describe('監査#4 不正なURLエンコードで 500 にしない', () => {

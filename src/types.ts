@@ -69,6 +69,8 @@ export type ResolvedFrom =
   | 'registry'
   | 'registry-latest'
   | 'clearlydefined'
+  /** 照会の上限に達したため確認していない。allowed と混同してはならない */
+  | 'not-checked'
   | 'unresolved';
 
 export interface Finding extends Dependency {

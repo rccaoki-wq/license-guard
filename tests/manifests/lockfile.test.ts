@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parsePackageLock } from '../../src/manifests/npm-lock';
 import { detectAndParse } from '../../src/manifests';
+import { scan } from '../../src/scan';
 
 const lock = (packages: Record<string, unknown>, version = 3) =>
   JSON.stringify({ name: 'demo', lockfileVersion: version, packages });
@@ -132,21 +133,40 @@ describe('detectAndParse がロックファイルを見分ける', () => {
   });
 });
 
-describe('上限超過時の案内', () => {
-  it('通常のマニフェストにはロックファイルを勧める', () => {
+describe('上限超過時のふるまい（scan 経由）', () => {
+  // 拒否して何も返さないより、確認できた分を返して未確認を明示する方が有用。
+  // 詳細は tests/partial-scan.test.ts
+  const emptyCache = { async get() { return null; }, async put() {} };
+  const fetchers = {
+    npm: async () => ({ spdx: 'MIT' }),
+    pypi: async () => ({ spdx: null }),
+    go: async () => ({ spdx: null }),
+  };
+
+  it('拒否せず部分的な結果を返す', async () => {
     const deps: Record<string, string> = {};
-    for (let i = 0; i <= 200; i++) deps[`p${i}`] = '1.0.0';
-    expect(() => detectAndParse(JSON.stringify({ dependencies: deps }))).toThrow(
-      /Send a package-lock\.json/,
-    );
+    for (let i = 0; i <= 250; i++) deps[`p${i}`] = '1.0.0';
+    const r = await scan(JSON.stringify({ dependencies: deps }), 'saas', emptyCache, fetchers);
+    expect(r.summary.total).toBe(251);
+    expect(r.findings.some((f) => f.resolvedFrom === 'not-checked')).toBe(true);
   });
 
-  it('既にロックファイルを送っている相手に同じ案内をしない', () => {
-    // license を持つものと持たないものが混在するロックファイル
-    const packages: Record<string, unknown> = { 'node_modules/known': { version: '1.0.0', license: 'MIT' } };
-    for (let i = 0; i <= 200; i++) packages[`node_modules/p${i}`] = { version: '1.0.0' };
-    expect(() => detectAndParse(JSON.stringify({ lockfileVersion: 3, packages }))).toThrow(
-      /Regenerating it with a current npm version/,
-    );
+  it('キャッシュに載っていれば未確認は生じない（共有キャッシュの効用）', async () => {
+    const packages: Record<string, unknown> = {};
+    for (let i = 0; i <= 400; i++) packages[`node_modules/p${i}`] = { version: '1.0.0' };
+
+    const warmCache = {
+      async get() { return { spdx: 'MIT', source: 'registry' }; },
+      async put() {},
+      async getMany(deps: Array<{ ecosystem: string; name: string; version: string | null }>) {
+        return new Map(
+          deps.map((d) => [`${d.ecosystem}|${d.name}|${d.version}`, { spdx: 'MIT', source: 'registry' }]),
+        );
+      },
+    };
+
+    const r = await scan(JSON.stringify({ lockfileVersion: 3, packages }), 'saas', warmCache, fetchers);
+    expect(r.summary.total).toBe(401);
+    expect(r.findings.some((f) => f.resolvedFrom === 'not-checked')).toBe(false);
   });
 });

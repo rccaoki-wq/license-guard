@@ -50,7 +50,8 @@ curl "https://license-guard.rcc-aoki.workers.dev/api/pkg/pypi/pyload-ng?model=sa
 
 対応: npm / PyPI / Go modules。
 
-**package-lock.json を渡すと推移的依存まで判定できます。** ロックファイルは
+**ロックファイルを渡すと推移的依存まで判定できます**（`package-lock.json` / `pnpm-lock.yaml` / `yarn.lock`）。
+このうち `package-lock.json` はライセンスを内包しているため外部照会が一切不要です。 ロックファイルは
 ライセンスを内包しているため外部照会が一切不要で、実際に導入される版の情報が
 そのまま使えます。問題のあるライセンスは直接追加した依存より、依存の依存として
 紛れ込むことの方が多いため、ここが実質的な本命です。

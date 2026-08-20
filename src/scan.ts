@@ -1,4 +1,4 @@
-import { detectAndParse } from './manifests';
+import { detectAndParse, MAX_LOOKUPS } from './manifests';
 import { LicenseResolver, defaultFetchers } from './resolver';
 import type { CacheLike, Fetchers } from './resolver';
 import { evaluateExpression } from './policy/engine';
@@ -29,6 +29,21 @@ const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
  * 解決失敗を前者と断定すると偽陽性になり、警告全体の信頼を損なうため
  * review に倒し、断定を避けた文言を用いる。
  */
+/**
+ * 照会の上限に達して確認しなかった依存の判定。
+ *
+ * 拒否して何も返さないより、確認できた分を返す方が有用。ただし
+ * 不完全なスキャンが「問題なし」に見えることは絶対に避ける必要がある。
+ * 人は要約を流し読みするので、未確認分は review として集計に載せ、
+ * 合計が clean にならないようにする。
+ */
+const NOT_CHECKED_RESULT: PolicyResult = {
+  verdict: 'review',
+  obligations: [],
+  rationale:
+    'This dependency was not checked. The request reached the limit on how many registry lookups one scan may perform. Scanning the same project again will cover more of it, because each scan adds what it resolved to a cache shared by everyone.',
+};
+
 const UNRESOLVED_RESULT: PolicyResult = {
   verdict: 'review',
   obligations: [],
@@ -80,6 +95,13 @@ function limitationsFor(ecosystem: Ecosystem, findings: Finding[]): string[] {
 
   // 再ライセンス（Grafana の Apache-2.0 から AGPL-3.0 など）は実際に起きるので、
   // 最新版で判定したものがあることを黙っておくのは不誠実になる。
+  const notChecked = findings.filter((f) => f.resolvedFrom === 'not-checked').length;
+  if (notChecked > 0) {
+    out.unshift(
+      `${notChecked} dependencies were not checked because this scan reached its registry lookup limit. They are listed as needing review, not as clear. Scanning again will cover more of them.`,
+    );
+  }
+
   if (findings.some((f) => f.resolvedFrom === 'registry-latest')) {
     out.push(
       'Some dependencies were resolved against the latest release because the pinned version declared no license of its own, or was never published. Those entries are marked. Licenses do change between versions.',
@@ -99,14 +121,55 @@ export async function scan(
   fetchers: Fetchers = defaultFetchers,
 ): Promise<ScanResult> {
   const parsed = detectAndParse(content);
+
+  // 上限は「解析した依存の数」ではなく「実際に上流へ問い合わせる数」に掛ける。
+  // 共有キャッシュが育つほど、大きなロックファイルでも照会は要らなくなる。
+  const cached = cache.getMany ? await cache.getMany(parsed.dependencies) : new Map();
+  const lookups = parsed.dependencies.filter(
+    (d) => !d.declaredLicense && !(d.version && cached.has(`${d.ecosystem}|${d.name}|${d.version}`)),
+  ).length;
+
+  // 上限を超えた分は照会せず、未確認として明示する。
+  // 費用の上限は保ったまま、確認できた分の価値は返す。
+  const needsLookup = (d: (typeof parsed.dependencies)[number]) =>
+    !d.declaredLicense && !(d.version && cached.has(`${d.ecosystem}|${d.name}|${d.version}`));
+
+  let budget = MAX_LOOKUPS;
+  const toResolve: typeof parsed.dependencies = [];
+  const skipped = new Set<number>();
+
+  parsed.dependencies.forEach((d, i) => {
+    if (needsLookup(d)) {
+      if (budget <= 0) {
+        skipped.add(i);
+        return;
+      }
+      budget -= 1;
+    }
+    toResolve.push(d);
+  });
+
   const resolver = new LicenseResolver(cache, fetchers);
-  const resolutions = await resolver.resolveAll(parsed.dependencies);
+  const resolved = await resolver.resolveAll(toResolve);
+
+  // 元の並び順に戻す
+  const resolutions: Array<(typeof resolved)[number]> = [];
+  let cursor = 0;
+  parsed.dependencies.forEach((_, i) => {
+    resolutions.push(
+      skipped.has(i)
+        ? { spdx: null, resolvedFrom: 'not-checked' as const }
+        : resolved[cursor++]!,
+    );
+  });
   const linkage = DEFAULT_LINKAGE[parsed.ecosystem];
 
   const findings: Finding[] = parsed.dependencies.map((dep, i) => {
     const res = resolutions[i]!;
     const policy =
-      res.resolvedFrom === 'unresolved'
+      res.resolvedFrom === 'not-checked'
+        ? NOT_CHECKED_RESULT
+        : res.resolvedFrom === 'unresolved'
         ? UNRESOLVED_RESULT
         : withProvenanceNote(
             evaluateExpression(res.spdx, {

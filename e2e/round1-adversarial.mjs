@@ -102,16 +102,24 @@ for (const [label, extra] of httpCases) {
   check(`${label}: 5xx でない`, status < 500, `HTTP ${status}`);
 }
 
-console.log('\n--- 境界値（照会が必要な依存の上限 200）---');
-for (const [n, want] of [
-  [199, 200],
-  [200, 200],
-  [201, 400],
-]) {
+console.log('\n--- 上限を超えたときのふるまい ---');
+// 拒否して何も返さないより、確認できた分を返す方が有用。
+// ただし不完全なスキャンが「問題なし」に見えることは許されない。
+{
   const d = {};
-  for (let i = 0; i < n; i++) d['p' + i] = '1.0.0';
-  const { status } = await scan(JSON.stringify({ dependencies: d }));
-  check(`${n} 依存 -> HTTP ${want}`, status === want, `HTTP ${status}`);
+  for (let i = 0; i < 260; i++) d['boundary-probe-' + i] = '1.0.0';
+  const { status, j } = await scan(JSON.stringify({ dependencies: d }));
+  check('上限超過でも 200 を返す', status === 200, `HTTP ${status}`);
+
+  if (j && j.findings) {
+    const nc = j.findings.filter((f) => f.resolvedFrom === 'not-checked');
+    check('全件が結果に含まれる', j.summary.total === 260, `total=${j.summary.total}`);
+    check('未確認を allowed にしない', nc.every((f) => f.verdict === 'review'), `${nc.length} 件`);
+    check(
+      '未確認があれば limitations に出す',
+      nc.length === 0 || j.limitations.some((l) => l.includes('were not checked')),
+    );
+  }
 }
 
 console.log('\n--- 入力サイズ上限（4MB）---');

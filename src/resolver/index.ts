@@ -21,6 +21,8 @@ export interface LicenseLookup {
 export interface CacheLike {
   get(dep: Dependency): Promise<{ spdx: string | null; source: string } | null>;
   put(dep: Dependency, spdx: string | null, source: string): Promise<void>;
+  /** 任意。上流照会が必要な件数を事前に見積もるために使う */
+  getMany?(deps: Dependency[]): Promise<Map<string, { spdx: string | null; source: string }>>;
 }
 
 export type Fetcher = (name: string, version: string | null) => Promise<LicenseLookup>;

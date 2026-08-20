@@ -22,6 +22,24 @@ interface CacheRow {
  */
 export const LATEST_FALLBACK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** キャッシュ表のキー。エコシステムまたぎの取り違えを防ぐ */
+export function cacheKey(ecosystem: string, name: string, version: string): string {
+  return `${ecosystem}|${name}|${version}`;
+}
+
+/**
+ * 一度の SQL に載せるパッケージ名の数。
+ *
+ * **D1 のバインドパラメータ上限は 1 クエリあたり 100 個**。
+ * 超えるとクエリ自体が失敗する。エコシステムを 1 個使うので名前は 99 まで。
+ * 余裕を見て 90 にしてある。
+ *
+ * 当初 200 にしていたため getMany が常に失敗し、catch に飲まれて
+ * 「キャッシュが効いていない」ことに気づけなかった。上限は推測せず
+ * 仕様を確認すること。
+ */
+const BATCH_SIZE = 90;
+
 /** 情報源が不変か（そのバージョン自身の宣言に基づくか） */
 function isImmutableSource(source: string): boolean {
   return source !== 'registry-latest';
@@ -54,6 +72,61 @@ export class LicenseCache {
     }
 
     return { spdx: row.spdx, source: row.source };
+  }
+
+  /**
+   * 複数の依存をまとめて引く。
+   *
+   * ライセンスを内包しないロックファイル（pnpm-lock.yaml、yarn.lock、
+   * go.sum など）では推移的依存が数百件になる。1 件ずつ問い合わせると
+   * 往復が積み上がるうえ、上流照会が必要な件数を事前に見積もれない。
+   *
+   * キャッシュは最適化であり、失敗しても解決処理を止めない。
+   */
+  async getMany(deps: Dependency[]): Promise<Map<string, CachedLicense>> {
+    const found = new Map<string, CachedLicense>();
+
+    // エコシステムごとにまとめる
+    const byEcosystem = new Map<string, Set<string>>();
+    for (const d of deps) {
+      if (d.version === null) continue;
+      const names = byEcosystem.get(d.ecosystem) ?? new Set<string>();
+      names.add(d.name);
+      byEcosystem.set(d.ecosystem, names);
+    }
+
+    for (const [ecosystem, nameSet] of byEcosystem) {
+      const names = [...nameSet];
+      for (let i = 0; i < names.length; i += BATCH_SIZE) {
+        const batch = names.slice(i, i + BATCH_SIZE);
+        const placeholders = batch.map(() => '?').join(',');
+        try {
+          const res = await this.db
+            .prepare(
+              `SELECT ecosystem, package, version, spdx, source, resolved_at
+               FROM license_cache
+               WHERE ecosystem = ? AND package IN (${placeholders})`,
+            )
+            .bind(ecosystem, ...batch)
+            .all<CacheRow & { ecosystem: string; package: string; version: string }>();
+
+          for (const row of res.results ?? []) {
+            if (!isImmutableSource(row.source)) {
+              if (typeof row.resolved_at !== 'number') continue;
+              if (Date.now() - row.resolved_at > LATEST_FALLBACK_TTL_MS) continue;
+            }
+            found.set(cacheKey(row.ecosystem, row.package, row.version), {
+              spdx: row.spdx,
+              source: row.source,
+            });
+          }
+        } catch {
+          // 引けなくても上流照会で解決できる
+        }
+      }
+    }
+
+    return found;
   }
 
   async put(dep: Dependency, spdx: string | null, source: string): Promise<void> {
