@@ -1,0 +1,10 @@
+node_modules
+dist
+.wrangler
+.git
+.tools
+e2e
+tests
+docs
+*.log
+*.png

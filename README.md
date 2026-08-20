@@ -23,9 +23,26 @@
 
 この製品が必要になるのは、ブラウザで検索している時ではなく**依存を追加している時**です。だから第一の配置は検索結果ではなく、エージェントのツールです。
 
+ホスト版（すぐ使える）:
+
 ```bash
 claude mcp add licenseguard --transport http https://license-guard.rcc-aoki.workers.dev/mcp
 ```
+
+ローカル版（マニフェストを手元から出さない）:
+
+```bash
+claude mcp add licenseguard -- npx -y tsx /path/to/license-guard/src/local/stdio.ts
+# または Docker
+docker build -t licenseguard . && claude mcp add licenseguard -- docker run -i --rm licenseguard
+```
+
+**判定エンジンは両者で同一です。** 違うのは経路だけで、答えが食い違うことはありません
+（`npm run e2e:stdio` で固定しています）。
+
+ローカル版は依存関係の一覧を外部に送りません。公開レジストリへ
+パッケージ名とバージョンを問い合わせるだけです。コンプライアンスを扱う道具に
+ロックファイルを渡したくない場合はこちらを使ってください。
 
 ステートレスな Streamable HTTP、認証不要。提供するツール:
 
