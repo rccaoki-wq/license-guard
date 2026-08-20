@@ -56,7 +56,15 @@ curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guar
 | [smithery.ai](https://smithery.ai) | 7千件超 | エコシステムの Docker Hub 的位置づけ |
 | [glama.ai/mcp](https://glama.ai/mcp) | — | 閲覧体験が良い |
 | [GitHub MCP Registry](https://github.com/mcp) | — | 単一の情報源を標榜 |
-| [punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | — | PR を送る |
+| [punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | 9.2万スター | **PR提出済**: [#12523](https://github.com/punkpeye/awesome-mcp-servers/pull/12523)（Legal カテゴリ） |
+
+### awesome-mcp-servers に出すときの注意
+
+- **自動エージェントは PR タイトル末尾に `🤖🤖🤖` を付ける**規約がある（CONTRIBUTING.md）。付けると早期マージの対象になる。隠さず使うこと
+- カテゴリ内はアルファベット順（owner 名基準、大文字小文字を区別しない）
+- 1行1サーバー。差分は最小にする
+- LicenseGuard は Legal に置いた。`ark-forge/mcp-eu-ai-act`（コードベースの規制違反スキャナ）と同じ形だから
+- 記載する主張（リンク、エンドポイント、対応形式）は**提出前に実際に叩いて確認する**
 
 多くは公式レジストリの API を取り込むため、まず公式に載せるのが効率的です。
 
