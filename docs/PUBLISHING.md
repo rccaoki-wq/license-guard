@@ -20,7 +20,7 @@ curl -fsSL https://github.com/modelcontextprotocol/registry/releases/latest/down
 ./mcp-publisher publish
 ```
 
-名前空間は `io.github.tyou20256-stack/license-guard`。GitHub アカウントの所有権が
+名前空間は `io.github.rccaoki-wq/license-guard`。GitHub アカウントの所有権が
 そのまま名前空間の証明になるため、DNS レコードの設定は不要です。
 
 登録後の確認:

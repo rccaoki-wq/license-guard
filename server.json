@@ -1,12 +1,12 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.tyou20256-stack/license-guard",
+  "name": "io.github.rccaoki-wq/license-guard",
   "title": "LicenseGuard",
   "description": "Check if a dependency's license obligates you, based on how you ship. npm, PyPI, Go.",
   "version": "1.0.0",
   "websiteUrl": "https://license-guard.rcc-aoki.workers.dev",
   "repository": {
-    "url": "https://github.com/tyou20256-stack/license-guard",
+    "url": "https://github.com/rccaoki-wq/license-guard",
     "source": "github"
   },
   "remotes": [
