@@ -32,11 +32,23 @@ const DISTRIBUTION_MODELS: readonly DistributionModel[] = [
 const ECOSYSTEMS: readonly Ecosystem[] = ['npm', 'pypi', 'go'];
 
 /**
- * Go モジュールパスの形。ホスト名で始まりスキームを含まないこと。
- * 検証しないと "https://evil.com/x" のような入力でも 200 を返し、
- * 意味のないページと無駄な外部リクエストを生む。
+ * エコシステムごとのパッケージ名の形。
+ *
+ * 検証しないと任意の文字列が 200 を返し、意味のないページと無駄な外部
+ * リクエストでクロール空間が無限に広がる。Go はスキーム付きの入力
+ * （"https://evil.com/x"）も弾く必要がある。
  */
-const GO_MODULE_PATH = /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(\/[A-Za-z0-9._~-]+)*$/i;
+const NAME_PATTERN: Record<Ecosystem, RegExp> = {
+  // スコープ付き（@scope/name）を含む npm の名前
+  npm: /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-zA-Z0-9][a-zA-Z0-9._~-]*$/,
+  pypi: /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
+  go: /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(\/[A-Za-z0-9._~-]+)*$/i,
+};
+
+function isValidPackageName(ecosystem: Ecosystem, name: string): boolean {
+  if (name === '' || name.length > 214) return false;
+  return NAME_PATTERN[ecosystem].test(name);
+}
 
 /** URL のパーセントデコード。不正な並びで例外を投げさせない */
 function safeDecode(v: string): string | null {
@@ -118,10 +130,6 @@ async function packageApi(
   if (!SCOPES.includes(scope)) {
     return c.json({ error: `scope must be one of: ${SCOPES.join(', ')}` }, 400);
   }
-  if (name === '' || name.length > 214) {
-    return c.json({ error: 'name is required.' }, 400);
-  }
-
   const resolver = new LicenseResolver(new LicenseCache(c.env.DB));
   const { spdx, resolvedFrom } = await resolver.resolve({ ecosystem, name, version, scope });
   const reference = SITE_ORIGIN + packagePath(ecosystem, name);
@@ -173,19 +181,21 @@ async function packageApi(
   );
 }
 
-app.get('/api/pkg/go/*', (c) => {
-  const name = safeDecode(c.req.path.slice('/api/pkg/go/'.length));
-  if (name === null) return c.json({ error: 'Malformed URL encoding.' }, 400);
-  if (!GO_MODULE_PATH.test(name)) {
-    return c.json({ error: 'Not a valid Go module path.' }, 400);
-  }
-  return packageApi(c, 'go', name);
-});
-
-app.get('/api/pkg/:ecosystem/:name', (c) => {
+/**
+ * 名前にスラッシュを含む形（npm のスコープ付き、Go のモジュールパス）を
+ * リテラルのまま受けたいので、末尾はワイルドカードで取る。
+ * パーセントエンコード形式も同じ経路で扱える。
+ */
+app.get('/api/pkg/:ecosystem/*', (c) => {
   const ecosystem = c.req.param('ecosystem') as Ecosystem;
   if (!ECOSYSTEMS.includes(ecosystem)) return c.notFound();
-  return packageApi(c, ecosystem, c.req.param('name'));
+
+  const name = safeDecode(c.req.path.slice(`/api/pkg/${ecosystem}/`.length));
+  if (name === null) return c.json({ error: 'Malformed URL encoding.' }, 400);
+  if (!isValidPackageName(ecosystem, name)) {
+    return c.json({ error: `Not a valid ${ecosystem} package name.` }, 400);
+  }
+  return packageApi(c, ecosystem, name);
 });
 
 app.get('/licenses', (c) =>
@@ -231,8 +241,6 @@ async function packageRoute(
   ecosystem: Ecosystem,
   name: string,
 ): Promise<Response> {
-  if (name === '' || name.length > 214) return c.notFound();
-
   const cache = new LicenseCache(c.env.DB);
   const resolver = new LicenseResolver(cache);
   const { spdx } = await resolver.resolve({ ecosystem, name, version: null, scope: 'runtime' });
@@ -249,16 +257,13 @@ async function packageRoute(
   });
 }
 
-app.get('/pkg/go/*', (c) => {
-  const name = safeDecode(c.req.path.slice('/pkg/go/'.length));
-  if (name === null || !GO_MODULE_PATH.test(name)) return c.notFound();
-  return packageRoute(c, 'go', name);
-});
-
-app.get('/pkg/:ecosystem/:name', (c) => {
+app.get('/pkg/:ecosystem/*', (c) => {
   const ecosystem = c.req.param('ecosystem') as Ecosystem;
   if (!ECOSYSTEMS.includes(ecosystem)) return c.notFound();
-  return packageRoute(c, ecosystem, c.req.param('name'));
+
+  const name = safeDecode(c.req.path.slice(`/pkg/${ecosystem}/`.length));
+  if (name === null || !isValidPackageName(ecosystem, name)) return c.notFound();
+  return packageRoute(c, ecosystem, name);
 });
 
 app.post('/api/scan', async (c) => {

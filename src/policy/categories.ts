@@ -14,6 +14,9 @@ const EXACT: Record<string, LicenseCategory> = {
   'python-2.0': 'permissive',
   postgresql: 'permissive',
   'blueoak-1.0.0': 'permissive',
+  // golang.org/x/* に付随する Go の PATENTS。権利を付与する追加許諾であり
+  // 制限ではない。未知として扱うと Go プロジェクトの大半が要確認になる。
+  'licenseref-scancode-google-patent-license-golang': 'permissive',
   // BSL-1.0 は Boost Software License（permissive）。
   // Business Source License の BSL-1.1 / BUSL-1.1 とは別物なので取り違えないこと。
   'bsl-1.0': 'permissive',

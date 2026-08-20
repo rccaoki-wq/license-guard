@@ -134,7 +134,7 @@ describe('監査#1 最新版フォールバックの開示', () => {
     );
     expect(r.findings[0]!.verdict).toBe('allowed');
     expect(r.findings[0]!.resolvedFrom).toBe('registry-latest');
-    expect(r.findings[0]!.rationale).toContain('pinned version declares no license of its own');
+    expect(r.findings[0]!.rationale).toContain('not read from the exact version requested');
   });
 
   it('limitations にも記す', async () => {
@@ -156,7 +156,7 @@ describe('監査#1 最新版フォールバックの開示', () => {
       noopCache,
       { ...fetchers, npm: async () => ({ spdx: 'MIT' }) },
     );
-    expect(r.findings[0]!.rationale).not.toContain('pinned version declares no license');
+    expect(r.findings[0]!.rationale).not.toContain('not read from the exact version requested');
     expect(r.limitations.some((l) => l.includes('latest release'))).toBe(false);
   });
 });

@@ -14,8 +14,9 @@
     "e2e:ui": "node e2e/ui.spec.mjs",
     "e2e:mcp": "node e2e/mcp-client.spec.mjs",
     "e2e:load": "node e2e/load.spec.mjs",
-    "e2e": "npm run e2e:ui && npm run e2e:mcp && npm run e2e:load && npm run e2e:adversarial",
-    "e2e:adversarial": "node e2e/round1-adversarial.mjs"
+    "e2e": "npm run e2e:ui && npm run e2e:mcp && npm run e2e:load && npm run e2e:adversarial && npm run e2e:correctness",
+    "e2e:adversarial": "node e2e/round1-adversarial.mjs",
+    "e2e:correctness": "node e2e/round2-correctness.mjs"
   },
   "dependencies": {
     "hono": "^4.6.0",

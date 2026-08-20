@@ -47,7 +47,7 @@ export function withProvenanceNote(
   if (resolvedFrom !== 'registry-latest') return result;
   return {
     ...result,
-    rationale: `${result.rationale} Note: the pinned version declares no license of its own, or was never published, so this reflects the latest release. Verify against the repository for the version you actually use.`,
+    rationale: `${result.rationale} Note: this license was not read from the exact version requested — that version declares none of its own, was never published, or has no curated license data. It reflects another release of the same package. Verify against the repository for the version you actually use.`,
   };
 }
 

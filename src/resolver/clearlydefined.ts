@@ -1,5 +1,5 @@
 import { fetchJson } from './http';
-import { fetchLatestGoVersion } from './goproxy';
+import { fetchGoVersions, fetchLatestGoVersion } from './goproxy';
 import type { LicenseLookup } from './index';
 
 /**
@@ -17,29 +17,90 @@ interface ClearlyDefinedDoc {
   licensed?: { declared?: string };
 }
 
+/** 未収録の座標では declared が無い、あるいは NOASSERTION になる */
+async function declaredLicense(
+  modulePath: string,
+  revision: string,
+  fetchImpl: typeof fetch,
+): Promise<string | null> {
+  const url = `https://api.clearlydefined.io/definitions/${toGoCoordinates(modulePath, revision)}`;
+  const doc = await fetchJson<ClearlyDefinedDoc>(url, fetchImpl);
+  const declared = doc?.licensed?.declared?.trim();
+  if (!declared || declared === 'NOASSERTION') return null;
+  return declared;
+}
+
+/** 最新版が未収録だったときに試す旧版の数 */
+const FALLBACK_CANDIDATES = 6;
+
+/**
+ * 候補をバージョン範囲全体から選ぶ。
+ *
+ * 直近の数版だけを見ても足りない。golang.org/x/crypto は 55 版あり
+ * 収録済みなのは v0.21.0 のような古い版で、上位数件では届かない。
+ * 新しい版を優先しつつ、古い側からも等間隔で拾う。
+ */
+export function pickCandidates(sortedDesc: string[], count: number): string[] {
+  if (sortedDesc.length <= count) return sortedDesc;
+
+  const recent = sortedDesc.slice(0, Math.ceil(count / 2));
+  const rest = sortedDesc.slice(recent.length);
+  const need = count - recent.length;
+  const step = Math.max(1, Math.floor(rest.length / need));
+
+  const spread: string[] = [];
+  for (let i = 0; i < rest.length && spread.length < need; i += step) {
+    spread.push(rest[i]!);
+  }
+  return [...recent, ...spread];
+}
+
 /**
  * ClearlyDefined から Go モジュールのライセンスを取得する。
  *
- * 未ハーベストの座標は初回要求時にその場でハーベストされるため応答が
- * 極めて遅くなる場合がある。fetchJson のタイムアウトにより null に落ち、
- * 次回以降はキャッシュ済みの定義が高速に返る。
+ * Go には中央のライセンスメタデータが無いため、キュレーション済みの
+ * ClearlyDefined に頼る。ただし ClearlyDefined は最新版を harvest して
+ * いないことが多く（testify は v1.12.1 が未収録で v1.10.0 は収録済）、
+ * 最新版だけを見ると主要モジュールでも解決に失敗する。
+ *
+ * そこでバージョン未指定の場合に限り、収録済みの旧版まで遡って探す。
+ * 固定版を指定された場合は代用しない。「この版のライセンスは何か」に
+ * 別の版の答えを返すことは、たとえ多くの場合正しくても許されない。
+ *
+ * 候補は並列で問い合わせる。直列にすると 5 秒のタイムアウトが積み上がり
+ * Worker の実行時間を使い切るため。
  */
 export async function fetchGoLicense(
   modulePath: string,
   version: string | null,
   fetchImpl: typeof fetch = fetch,
 ): Promise<LicenseLookup> {
-  // ClearlyDefined の座標はリビジョン必須。未指定ならプロキシから最新版を引く。
-  const revision = version ?? (await fetchLatestGoVersion(modulePath, fetchImpl));
-  if (revision === null) return { spdx: null };
+  if (version !== null) {
+    const spdx = await declaredLicense(modulePath, version, fetchImpl);
+    return { spdx };
+  }
 
-  const url = `https://api.clearlydefined.io/definitions/${toGoCoordinates(modulePath, revision)}`;
+  const latest = await fetchLatestGoVersion(modulePath, fetchImpl);
+  if (latest !== null) {
+    const spdx = await declaredLicense(modulePath, latest, fetchImpl);
+    if (spdx !== null) return { spdx };
+  }
 
-  const doc = await fetchJson<ClearlyDefinedDoc>(url, fetchImpl);
-  if (doc === null) return { spdx: null };
+  const versions = await fetchGoVersions(modulePath, fetchImpl);
+  const candidates = pickCandidates(
+    versions.filter((v) => v !== latest),
+    FALLBACK_CANDIDATES,
+  );
+  if (candidates.length === 0) return { spdx: null };
 
-  const declared = doc.licensed?.declared?.trim();
-  if (!declared || declared === 'NOASSERTION') return { spdx: null };
+  const results = await Promise.all(
+    candidates.map((v) => declaredLicense(modulePath, v, fetchImpl).catch(() => null)),
+  );
 
-  return { spdx: declared };
+  // 新しい順に並んでいるので、最初に見つかったものが最も新しい収録済みの版
+  const found = results.find((r) => r !== null) ?? null;
+  if (found === null) return { spdx: null };
+
+  // 要求された対象そのものではない版から採ったことを呼び出し側へ伝える
+  return { spdx: found, fromLatest: true };
 }
