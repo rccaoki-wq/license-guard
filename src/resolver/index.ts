@@ -61,9 +61,12 @@ export class LicenseResolver {
   ) {}
 
   async resolve(dep: Dependency): Promise<Resolution> {
+    // キャッシュは最適化であり、その失敗が解決処理を壊してはならない。
+    // D1 のクォータ枯渇などで読み書きが落ちても、レジストリ照会は続行する。
+    const cached = await this.cache.get(dep).catch(() => null);
+
     // キャッシュヒットでも出所は保つ。「固定版由来」か「最新版由来」かは
     // 利用者の判断を変えるため、キャッシュを経ただけで失ってはならない。
-    const cached = await this.cache.get(dep);
     if (cached) {
       const from = RESOLVED_FROM_VALUES.includes(cached.source as ResolvedFrom)
         ? (cached.source as ResolvedFrom)
@@ -84,7 +87,7 @@ export class LicenseResolver {
     }
 
     const source: ResolvedFrom = lookup.fromLatest ? 'registry-latest' : SOURCE[dep.ecosystem];
-    await this.cache.put(dep, lookup.spdx, source);
+    await this.cache.put(dep, lookup.spdx, source).catch(() => undefined);
     return { spdx: lookup.spdx, resolvedFrom: source };
   }
 

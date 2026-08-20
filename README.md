@@ -57,8 +57,12 @@ npm install
 npm test          # 全テスト
 npm run typecheck
 npm run smoke     # 実レジストリへの疎通確認
+npm run e2e       # 本番に対する E2E（ブラウザ / MCPクライアント / 負荷）
 npm run dev       # http://localhost:8787
 ```
+
+ユニットテストが全て通っていても、実データを流すまで見つからない欠陥がある。
+`smoke` と `e2e` は本番相当の外部依存に対して実行するため、リリース前に必ず通すこと。
 
 デプロイ:
 

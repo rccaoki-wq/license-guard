@@ -1,3 +1,5 @@
+import { categorize } from './categories';
+
 /**
  * SPDX として解釈できない歴史的な表記を SPDX 識別子に寄せる。
  *
@@ -61,5 +63,15 @@ export function normalizeLicenseString(raw: string): string {
   // 式として書かれているものは分解せずパーサへ渡す
   if (/[()]|\s(OR|AND|WITH)\s/i.test(trimmed)) return trimmed;
 
-  return LEGACY_ALIASES[trimmed.toLowerCase()] ?? trimmed;
+  const alias = LEGACY_ALIASES[trimmed.toLowerCase()];
+  if (alias) return alias;
+
+  // "BSD 2-Clause" のようにハイフンを空白で書いたもの。区切りを揃えた結果が
+  // 既知の識別子になる場合のみ採用し、そうでなければ元の文字列を保つ。
+  const hyphenated = trimmed.replace(/\s+/g, '-');
+  if (hyphenated !== trimmed && categorize(hyphenated) !== 'unknown') {
+    return hyphenated;
+  }
+
+  return trimmed;
 }

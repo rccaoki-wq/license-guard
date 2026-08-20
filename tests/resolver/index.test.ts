@@ -90,3 +90,41 @@ describe('LicenseResolver', () => {
     expect(out.every((x) => x.spdx === 'MIT')).toBe(true);
   });
 });
+
+describe('キャッシュ書き込みの失敗が読み取りを壊さない', () => {
+  it('put が例外を投げても解決結果を返す', async () => {
+    // D1 のクォータ枯渇などで書き込みが落ちても、キャッシュは最適化に過ぎず
+    // スキャン全体を失敗させてはならない
+    const brokenCache = {
+      async get() {
+        return null;
+      },
+      async put() {
+        throw new Error('D1_ERROR: too many writes');
+      },
+    };
+    const r = new LicenseResolver(brokenCache, {
+      npm: async () => ({ spdx: 'MIT' }),
+      pypi: async () => ({ spdx: null }),
+      go: async () => ({ spdx: null }),
+    });
+
+    expect(await r.resolve(dep())).toEqual({ spdx: 'MIT', resolvedFrom: 'registry' });
+  });
+
+  it('get が例外を投げても解決を続行する', async () => {
+    const brokenCache = {
+      async get(): Promise<null> {
+        throw new Error('D1_ERROR: read failed');
+      },
+      async put() {},
+    };
+    const r = new LicenseResolver(brokenCache, {
+      npm: async () => ({ spdx: 'MIT' }),
+      pypi: async () => ({ spdx: null }),
+      go: async () => ({ spdx: null }),
+    });
+
+    expect((await r.resolve(dep())).spdx).toBe('MIT');
+  });
+});

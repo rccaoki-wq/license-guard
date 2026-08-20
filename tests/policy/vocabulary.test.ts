@@ -80,3 +80,20 @@ describe('正規化が判定に効く', () => {
     expect(evaluateExpression('Weird-Custom-Thing', ctx).verdict).toBe('review');
   });
 });
+
+describe('空白区切りの緩い表記', () => {
+  it('ハイフンの代わりに空白を使った SPDX 識別子を認識する', () => {
+    expect(normalizeLicenseString('BSD 2-Clause')).toBe('BSD-2-Clause');
+    expect(normalizeLicenseString('BSD 3 Clause')).toBe('BSD-3-Clause');
+    expect(normalizeLicenseString('GPL 3.0 only')).toBe('GPL-3.0-only');
+    expect(normalizeLicenseString('Apache 2.0')).toBe('Apache-2.0');
+  });
+
+  it('置換後も未知のものは元の文字列を保つ', () => {
+    expect(normalizeLicenseString('Some Custom Thing')).toBe('Some Custom Thing');
+  });
+
+  it('緩い表記が判定に反映される', () => {
+    expect(evaluateExpression('BSD 2-Clause', ctx).verdict).toBe('allowed');
+  });
+});

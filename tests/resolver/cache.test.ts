@@ -15,7 +15,8 @@ function fakeDb() {
             async first<T>(): Promise<T | null> {
               calls.get += 1;
               const key = args.slice(0, 3).join('|');
-              return (rows.get(key) as T) ?? null;
+              const row = rows.get(key);
+              return row ? ({ ...row, resolved_at: Date.now() } as T) : null;
             },
             async run() {
               calls.put += 1;
