@@ -78,8 +78,8 @@ describe('scan', () => {
   it('解決できない依存の理由に「宣言されていない」と断定しない', async () => {
     const content = JSON.stringify({ dependencies: { mystery: '1.0.0' } });
     const result = await scan(content, 'saas', noopCache(), fetchers({}));
-    expect(result.findings[0]!.rationale).toContain('特定できませんでした');
-    expect(result.findings[0]!.rationale).not.toContain('宣言されていません');
+    expect(result.findings[0]!.rationale).toContain('could not be determined');
+    expect(result.findings[0]!.rationale).not.toContain('No license is declared');
   });
 
   it('Go は静的リンクを既定とする', async () => {
@@ -109,6 +109,6 @@ describe('scan', () => {
   it('limitations に直接依存のみである旨を含める', async () => {
     const content = JSON.stringify({ dependencies: { a: '1.0.0' } });
     const result = await scan(content, 'saas', noopCache(), fetchers({ a: 'MIT' }));
-    expect(result.limitations.some((l) => l.includes('直接依存'))).toBe(true);
+    expect(result.limitations.some((l) => l.includes('direct dependencies'))).toBe(true);
   });
 });

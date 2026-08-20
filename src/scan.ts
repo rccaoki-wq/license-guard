@@ -33,7 +33,7 @@ const UNRESOLVED_RESULT: PolicyResult = {
   verdict: 'review',
   obligations: [],
   rationale:
-    'ライセンス情報を特定できませんでした。宣言が存在しないか、上流レジストリから取得できなかったかのいずれかです。ライセンス表記が実際に存在しない著作物は既定で全権利留保となるため、原典の確認が必要です。',
+    'The license could not be determined. Either none is declared, or the upstream registry did not return one. A work genuinely published without a license is all rights reserved by default, so the original source needs to be checked.',
 };
 
 function summarize(findings: Finding[]): ScanSummary {
@@ -47,17 +47,17 @@ function summarize(findings: Finding[]): ScanSummary {
 
 function limitationsFor(ecosystem: Ecosystem, findings: Finding[]): string[] {
   const out = [
-    'この結果は直接依存のみを対象としています。推移的依存（依存の依存）は含まれません。',
-    'この結果はマニフェストに宣言されたライセンス情報に基づくものであり、ソースコード内に混入したコード片は検出していません。',
+    'Only direct dependencies were checked. Transitive dependencies are not included.',
+    'Results are based on license metadata declared in the manifest. Code copied into your own source files is not detected.',
   ];
 
   if (ecosystem === 'go') {
-    out.push('Go はリンク形態を静的として判定しています。');
+    out.push('Go modules were evaluated assuming static linking.');
   }
 
   if (findings.some((f) => f.version === null)) {
     out.push(
-      'バージョンが範囲指定されている依存は、最新版のライセンスで判定しています。実際に導入されるバージョンとは異なる場合があります。',
+      'Dependencies given as version ranges were resolved against the latest published version, which may differ from what actually gets installed.',
     );
   }
 

@@ -1,0 +1,109 @@
+import { verdictMatrix } from '../policy/matrix';
+import { findLicense } from '../seo/catalog';
+import { esc, obligationBadges, renderLayout, scanCta, verdictTable } from './layout';
+import type { Ecosystem, Linkage } from '../types';
+
+const ECOSYSTEM_LABEL: Record<Ecosystem, string> = {
+  npm: 'npm',
+  pypi: 'PyPI',
+  go: 'Go module',
+};
+
+const MANIFEST_NAME: Record<Ecosystem, string> = {
+  npm: 'package.json',
+  pypi: 'requirements.txt',
+  go: 'go.mod',
+};
+
+/** Go / Rust は静的リンクが既定 */
+const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
+  npm: 'dynamic',
+  pypi: 'dynamic',
+  go: 'static',
+};
+
+export interface PackagePageInput {
+  ecosystem: Ecosystem;
+  name: string;
+  spdx: string;
+}
+
+export function packagePath(ecosystem: Ecosystem, name: string): string {
+  // Go のモジュールパスはスラッシュを含むため、そのまま経路に載せる
+  return ecosystem === 'go'
+    ? `/pkg/go/${name}`
+    : `/pkg/${ecosystem}/${encodeURIComponent(name)}`;
+}
+
+export function renderPackagePage(input: PackagePageInput): string {
+  const { ecosystem, name, spdx } = input;
+  const linkage = DEFAULT_LINKAGE[ecosystem];
+  const rows = verdictMatrix(spdx, 'runtime', linkage);
+  const dev = verdictMatrix(spdx, 'dev', linkage)[0]!;
+  const known = findLicense(spdx);
+
+  const blocked = rows.filter((r) => r.verdict === 'blocked');
+  const eco = ECOSYSTEM_LABEL[ecosystem];
+
+  const headline =
+    blocked.length === 0
+      ? `${name} is licensed under ${spdx}, which imposes no source-disclosure obligation in any of the shipping models below.`
+      : `${name} is licensed under ${spdx}. That triggers obligations in ${blocked.length} of the 5 common shipping models, so whether it is safe for you depends on how you ship.`;
+
+  const title = `Is ${name} safe for commercial use? ${spdx} license obligations`;
+  const description = `${name} (${eco}) is licensed under ${spdx}. See what that requires for hosted SaaS, distributed binaries, customer delivery, internal use, and published libraries.`;
+
+  const body = `
+<h1>Is <code>${esc(name)}</code> safe for commercial use?</h1>
+<p class="sub">${esc(eco)} package &middot; License: <a href="${known ? `/license/${encodeURIComponent(known.id)}` : '/licenses'}">${esc(spdx)}</a></p>
+
+<p>${esc(headline)}</p>
+
+<h2>Result by how you ship</h2>
+${verdictTable(rows)}
+
+<h2>What you have to do</h2>
+<p>${obligationBadges(rows.find((r) => r.obligations.length > 0)?.obligations ?? [])}</p>
+
+<div class="callout">
+<p><strong>If you only use it at build time, the answer changes.</strong></p>
+<p>${esc(dev.rationale)}</p>
+</div>
+
+${
+  known
+    ? `<h2>About ${esc(known.id)}</h2>
+<p>${esc(known.summary)}</p>
+<p><a href="/license/${encodeURIComponent(known.id)}">Full ${esc(known.id)} reference &rarr;</a></p>`
+    : ''
+}
+
+${scanCta(`This page covers one package. Your ${MANIFEST_NAME[ecosystem]} has many more.`)}
+
+<h2>How this was determined</h2>
+<p>The license was read from ${ecosystem === 'go' ? 'ClearlyDefined, which curates license data for Go modules' : `the ${eco} registry`}, then evaluated against each shipping model. ${ecosystem === 'go' ? 'Go dependencies are linked statically, which is assumed here.' : ''} Only the declared license is considered; code copied into a project's own source files is not detected by this method.</p>
+`;
+
+  return renderLayout({
+    title,
+    description,
+    path: packagePath(ecosystem, name),
+    body,
+  });
+}
+
+export function renderPackageNotFound(ecosystem: Ecosystem, name: string): string {
+  const body = `
+<h1>No license found for <code>${esc(name)}</code></h1>
+<p class="sub">${esc(ECOSYSTEM_LABEL[ecosystem])} package</p>
+<p>Either this package does not exist, or the registry returned no license metadata for it. These are very different situations and this page cannot tell them apart, so no verdict is shown.</p>
+<p>A package that genuinely declares no license is all rights reserved by default, which is more restrictive than any open source license — worth confirming against the project's own repository.</p>
+${scanCta('Check the rest of your dependencies while you are here.')}
+`;
+  return renderLayout({
+    title: `No license found for ${name}`,
+    description: `No license metadata was returned for the ${ECOSYSTEM_LABEL[ecosystem]} package ${name}.`,
+    path: packagePath(ecosystem, name),
+    body,
+  });
+}

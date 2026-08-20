@@ -1,33 +1,12 @@
-export function renderPage(): string {
-  return `<!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LicenseGuard — 依存ライセンスの適合チェック</title>
-<meta name="description" content="package.json / requirements.txt / go.mod を貼り付けるだけで、依存OSSのライセンスがあなたの配布モデルに対して義務を発生させるかを判定します。">
-<style>
-:root{--bg:#fff;--fg:#16161a;--muted:#6b6b76;--line:#e4e4e8;--card:#fafafa;
---ok:#0a7c3f;--warn:#8a6100;--bad:#b3261e;--accent:#1a5fd0}
-@media (prefers-color-scheme: dark){
-:root{--bg:#111114;--fg:#eaeaef;--muted:#9a9aa6;--line:#2a2a31;--card:#1a1a1f;
---ok:#4ad07f;--warn:#e0b040;--bad:#ff6b5e;--accent:#6fa8ff}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);
-font:16px/1.65 system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif}
-.wrap{max-width:920px;margin:0 auto;padding:32px 20px 80px}
-h1{font-size:1.6rem;margin:0 0 8px}
-.sub{color:var(--muted);margin:0 0 28px}
+import { renderLayout } from './layout';
+
+const TOOL_STYLES = `
 label{display:block;font-weight:600;margin:20px 0 6px}
-textarea{width:100%;min-height:220px;padding:12px;border:1px solid var(--line);
+textarea{width:100%;min-height:210px;padding:12px;border:1px solid var(--line);
 border-radius:8px;background:var(--card);color:var(--fg);
 font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;resize:vertical}
-select,button{font:inherit}
 select{padding:9px 12px;border:1px solid var(--line);border-radius:8px;
-background:var(--card);color:var(--fg);width:100%;max-width:420px}
-button{padding:11px 22px;border:0;border-radius:8px;background:var(--accent);
-color:#fff;font-weight:600;cursor:pointer}
-button:disabled{opacity:.55;cursor:progress}
+background:var(--card);color:var(--fg);width:100%;max-width:420px;font:inherit}
 .hint{color:var(--muted);font-size:.85rem;margin-top:6px}
 .summary{display:flex;gap:10px;flex-wrap:wrap;margin:24px 0 12px}
 .chip{padding:6px 14px;border-radius:999px;border:1px solid var(--line);font-weight:600;font-size:.9rem}
@@ -40,61 +19,16 @@ padding:14px 16px;margin-bottom:10px;background:var(--card)}
 .f.review{border-left-color:var(--warn)}
 .f.allowed{border-left-color:var(--ok)}
 .f h3{margin:0 0 4px;font-size:1rem;font-family:ui-monospace,monospace;word-break:break-all}
+.f h3 a{text-decoration:none}
 .meta{color:var(--muted);font-size:.82rem;margin-bottom:8px}
 .why{font-size:.92rem;margin:0}
-.limits{margin-top:28px;padding:14px 16px;border:1px solid var(--line);
+.limits{margin-top:26px;padding:14px 16px;border:1px solid var(--line);
 border-radius:8px;color:var(--muted);font-size:.85rem}
 .limits ul{margin:6px 0 0;padding-left:20px}
-.cta{margin-top:28px;padding:22px;border:1px solid var(--accent);border-radius:10px;text-align:center}
-.cta p{margin:0 0 14px}
-.disclaimer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);
-color:var(--muted);font-size:.8rem}
 .err{color:var(--bad);font-weight:600;margin-top:14px}
-.hidden{display:none}
-</style>
-</head>
-<body>
-<div class="wrap">
-<h1>LicenseGuard</h1>
-<p class="sub">依存OSSのライセンスが、あなたの配布モデルに対して義務を発生させるかを判定します。サインアップ不要。</p>
+`;
 
-<label for="model">配布モデル</label>
-<select id="model">
-  <option value="saas">SaaS として外部提供する</option>
-  <option value="distributed-binary">バイナリ・アプリとして配布する</option>
-  <option value="on-prem-delivery">顧客環境に納品する</option>
-  <option value="internal-only">社内でのみ利用する</option>
-  <option value="library-published">ライブラリとして公開する</option>
-</select>
-<p class="hint">同じライセンスでも、配布モデルによって結論が変わります。</p>
-
-<label for="content">マニフェストを貼り付け</label>
-<textarea id="content" placeholder="package.json / requirements.txt / go.mod のいずれかをそのまま貼り付けてください"></textarea>
-<p class="hint">貼り付けた内容はライセンス判定にのみ使用し、保存しません。</p>
-
-<p style="margin-top:18px"><button id="run">判定する</button></p>
-<p id="error" class="err hidden"></p>
-
-<div id="result" class="hidden">
-  <div class="summary" id="summary"></div>
-  <div id="findings"></div>
-  <div class="limits" id="limits"></div>
-  <div class="cta">
-    <p>この結果を、監査提出用のPDFレポートにまとめますか？<br>推移的依存まで含めた完全版を作成します。</p>
-    <button id="cta-paid-report">有料レポートを見る（$199）</button>
-    <p id="cta-thanks" class="hint hidden">ありがとうございます。準備ができ次第ご案内します。</p>
-  </div>
-</div>
-
-<p class="disclaimer">
-本ツールが提示するのは、公開されたライセンス条文と依存マニフェストに基づく情報であり、<strong>法的助言ではありません</strong>。
-本ツールの利用によって弁護士・依頼者関係は成立しません。
-判定はマニフェストに宣言されたライセンス情報に基づくものであり、全ての義務や違反を網羅するものではありません。
-実際の判断にあたっては有資格の専門家にご相談ください。
-</p>
-</div>
-
-<script>
+const SCRIPT = `
 const sid = (crypto.randomUUID && crypto.randomUUID()) || String(Math.random()).slice(2);
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -107,7 +41,11 @@ function track(name) {
   }).catch(() => {});
 }
 
-const LABEL = { allowed: '問題なし', review: '要確認', blocked: '義務が発生' };
+const LABEL = { allowed: 'No obligation', review: 'Needs review', blocked: 'Obligation triggered' };
+
+function pkgHref(eco, name) {
+  return eco === 'go' ? '/pkg/go/' + name : '/pkg/' + eco + '/' + encodeURIComponent(name);
+}
 
 $('run').addEventListener('click', async () => {
   const btn = $('run');
@@ -115,13 +53,13 @@ $('run').addEventListener('click', async () => {
   $('error').classList.add('hidden');
 
   if (!content.trim()) {
-    $('error').textContent = 'マニフェストを貼り付けてください。';
+    $('error').textContent = 'Paste a manifest first.';
     $('error').classList.remove('hidden');
     return;
   }
 
   btn.disabled = true;
-  btn.textContent = '判定中…';
+  btn.textContent = 'Checking...';
   track('scan_submitted');
 
   try {
@@ -131,24 +69,24 @@ $('run').addEventListener('click', async () => {
       body: JSON.stringify({ content, distributionModel: $('model').value }),
     });
     const data = await res.json();
-
-    if (!res.ok) throw new Error(data.error || '判定に失敗しました');
+    if (!res.ok) throw new Error(data.error || 'Check failed.');
 
     $('summary').innerHTML =
-      '<span class="chip bad">義務が発生 ' + data.summary.blocked + '</span>' +
-      '<span class="chip warn">要確認 ' + data.summary.review + '</span>' +
-      '<span class="chip ok">問題なし ' + data.summary.allowed + '</span>';
+      '<span class="chip bad">Obligation triggered ' + data.summary.blocked + '</span>' +
+      '<span class="chip warn">Needs review ' + data.summary.review + '</span>' +
+      '<span class="chip ok">No obligation ' + data.summary.allowed + '</span>';
 
     $('findings').innerHTML = data.findings.map((f) =>
       '<div class="f ' + f.verdict + '">' +
-        '<h3>' + esc(f.name) + (f.version ? '@' + esc(f.version) : '') + '</h3>' +
-        '<p class="meta">' + LABEL[f.verdict] + ' ・ ' +
-          esc(f.spdxExpression || 'ライセンス不明') + ' ・ ' + esc(f.scope) + '</p>' +
+        '<h3><a href="' + pkgHref(data.ecosystem, f.name) + '">' + esc(f.name) + '</a>' +
+          (f.version ? '@' + esc(f.version) : '') + '</h3>' +
+        '<p class="meta">' + LABEL[f.verdict] + ' &middot; ' +
+          esc(f.spdxExpression || 'license unknown') + ' &middot; ' + esc(f.scope) + '</p>' +
         '<p class="why">' + esc(f.rationale) + '</p>' +
       '</div>'
     ).join('');
 
-    $('limits').innerHTML = '<strong>この結果の限界</strong><ul>' +
+    $('limits').innerHTML = '<strong>Limits of this result</strong><ul>' +
       data.limitations.map((l) => '<li>' + esc(l) + '</li>').join('') + '</ul>';
 
     $('result').classList.remove('hidden');
@@ -159,7 +97,7 @@ $('run').addEventListener('click', async () => {
     track('scan_failed');
   } finally {
     btn.disabled = false;
-    btn.textContent = '判定する';
+    btn.textContent = 'Check licenses';
   }
 });
 
@@ -167,7 +105,55 @@ $('cta-paid-report').addEventListener('click', () => {
   track('cta_paid_report_clicked');
   $('cta-thanks').classList.remove('hidden');
 });
-</script>
-</body>
-</html>`;
+`;
+
+export function renderPage(): string {
+  const body = `
+<style>${TOOL_STYLES}</style>
+
+<h1>Does anything you depend on obligate you?</h1>
+<p class="sub">Paste a manifest. No signup. The answer depends on how you ship your software, so tell it that first.</p>
+
+<label for="model">How do you ship this software?</label>
+<select id="model">
+  <option value="saas">Hosted SaaS &mdash; users reach it over a network</option>
+  <option value="distributed-binary">Distributed binary or application</option>
+  <option value="on-prem-delivery">Delivered into a customer environment</option>
+  <option value="internal-only">Internal use only</option>
+  <option value="library-published">Published as a library</option>
+</select>
+<p class="hint">The same license produces different obligations for each of these. Most scanners ignore the distinction.</p>
+
+<label for="content">Manifest</label>
+<textarea id="content" placeholder="Paste package.json, requirements.txt, or go.mod"></textarea>
+<p class="hint">Pasted content is used to look up licenses and is not stored.</p>
+
+<p style="margin-top:18px"><button class="btn" id="run">Check licenses</button></p>
+<p id="error" class="err hidden"></p>
+
+<div id="result" class="hidden">
+  <div class="summary" id="summary"></div>
+  <div id="findings"></div>
+  <div class="limits" id="limits"></div>
+  <div class="cta">
+    <p>Want this as an audit-ready PDF, covering transitive dependencies too?<br>The kind of thing due diligence and procurement ask for.</p>
+    <button class="btn" id="cta-paid-report">See the full report ($199)</button>
+    <p id="cta-thanks" class="hint hidden">Thanks &mdash; we will let you know when it is ready.</p>
+  </div>
+</div>
+
+<h2>Why the shipping model decides it</h2>
+<p>AGPL-3.0 is the clearest case. Its section 13 obligation attaches when users interact with the software over a network, so a hosted SaaS triggers it while purely internal use does not. GPL works the opposite way: its obligations attach to distribution, so hosting is fine and shipping a binary is not. A scanner that reports "AGPL detected" without knowing which of these you are doing is telling you almost nothing.</p>
+<p>The same applies to build-time dependencies. A tool that never ends up in your artifact cannot impose distribution obligations on it, yet most scanners warn about them anyway &mdash; which is how teams learn to ignore the warnings.</p>
+<p><a href="/licenses">Browse license obligations &rarr;</a></p>
+`;
+
+  return renderLayout({
+    title: 'LicenseGuard — check whether your dependencies obligate you',
+    description:
+      'Paste package.json, requirements.txt, or go.mod and see which dependency licenses create obligations for your specific shipping model — hosted SaaS, distributed binary, customer delivery, internal use, or published library.',
+    path: '/',
+    body,
+    script: SCRIPT,
+  });
 }

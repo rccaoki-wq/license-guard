@@ -15,7 +15,7 @@ export interface ParsedManifest {
 export function detectAndParse(content: string): ParsedManifest {
   const trimmed = content.trim();
   if (trimmed === '') {
-    throw new Error('入力が空です');
+    throw new Error('Input is empty.');
   }
 
   let result: ParsedManifest;
@@ -30,7 +30,7 @@ export function detectAndParse(content: string): ParsedManifest {
 
   if (result.dependencies.length === 0) {
     throw new Error(
-      '依存を検出できませんでした。package.json / requirements.txt / go.mod のいずれかを貼り付けてください。',
+      'No dependencies were found. Paste a package.json, requirements.txt, or go.mod.',
     );
   }
 

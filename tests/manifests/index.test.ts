@@ -25,10 +25,10 @@ describe('detectAndParse', () => {
   });
 
   it('空入力は例外を投げる', () => {
-    expect(() => detectAndParse('   ')).toThrow('入力が空です');
+    expect(() => detectAndParse('   ')).toThrow('Input is empty');
   });
 
   it('依存が1件も取れない場合は例外を投げる', () => {
-    expect(() => detectAndParse('!!!!!')).toThrow('依存を検出できませんでした');
+    expect(() => detectAndParse('!!!!!')).toThrow('No dependencies were found');
   });
 });

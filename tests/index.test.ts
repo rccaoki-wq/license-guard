@@ -84,7 +84,7 @@ describe('app', () => {
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('依存を検出できませんでした');
+    expect(body.error).toContain('No dependencies were found');
   });
 
   it('POST /api/scan は 100KB を超える入力を 413 で拒否する', async () => {
@@ -129,5 +129,64 @@ describe('app', () => {
     );
     expect(res.status).toBe(204);
     expect(inserted).toHaveLength(0);
+  });
+});
+
+describe('SEO ルート', () => {
+  it('GET /licenses は一覧を返す', async () => {
+    const { env } = fakeEnv();
+    const res = await app.request('/licenses', {}, env);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('/license/AGPL-3.0-only');
+  });
+
+  it('GET /license/:id は既知ライセンスのページを返す', async () => {
+    const { env } = fakeEnv();
+    const res = await app.request('/license/AGPL-3.0-only', {}, env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toContain('s-maxage');
+    expect(await res.text()).toContain('section 13');
+  });
+
+  it('GET /license/:id は未知IDで 404', async () => {
+    const { env } = fakeEnv();
+    expect((await app.request('/license/NOPE-9000', {}, env)).status).toBe(404);
+  });
+
+  it('GET /robots.txt は sitemap を指す', async () => {
+    const { env } = fakeEnv();
+    const res = await app.request('/robots.txt', {}, env);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('Sitemap:');
+  });
+
+  it('GET /sitemap.xml は XML を返す', async () => {
+    const { env } = fakeEnv();
+    const res = await app.request('/sitemap.xml', {}, env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('xml');
+    expect(await res.text()).toContain('<urlset');
+  });
+
+  it('GET /sitemap.xml は DB 障害時もシードで応答する', async () => {
+    const env = {
+      DB: {
+        prepare() {
+          return {
+            async all() {
+              throw new Error('db down');
+            },
+          };
+        },
+      } as unknown as D1Database,
+    };
+    const res = await app.request('/sitemap.xml', {}, env);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('/pkg/npm/express');
+  });
+
+  it('GET /pkg/:eco/:name は未知エコシステムで 404', async () => {
+    const { env } = fakeEnv();
+    expect((await app.request('/pkg/maven/foo', {}, env)).status).toBe(404);
   });
 });

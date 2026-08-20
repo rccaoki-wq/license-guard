@@ -35,7 +35,7 @@ function evalNode(node: Node, ctx: PolicyContext): PolicyResult {
       return {
         verdict: 'allowed',
         obligations: ['attribution'],
-        rationale: `${node.license} に ${node.exception} が付与されています。この例外はリンクに伴うコピーレフト義務の適用を除外します。`,
+        rationale: `${node.license} carries the ${node.exception} exception, which lifts the copyleft obligation that linking would otherwise trigger.`,
       };
     }
     return evaluateLicense(node.license, ctx);
@@ -50,7 +50,7 @@ function evalNode(node: Node, ctx: PolicyContext): PolicyResult {
     return {
       verdict: chosen.verdict,
       obligations: chosen.obligations,
-      rationale: `複数ライセンスからの選択が可能です。より制約の少ない条件を採用しています。${chosen.rationale}`,
+      rationale: `This package offers a choice of licenses. The least restrictive option is shown. ${chosen.rationale}`,
     };
   }
 
@@ -59,7 +59,7 @@ function evalNode(node: Node, ctx: PolicyContext): PolicyResult {
   return {
     verdict: stricter.verdict,
     obligations: mergeObligations(left.obligations, right.obligations),
-    rationale: `複数ライセンスが同時に適用されます。${left.rationale} / ${right.rationale}`,
+    rationale: `Multiple licenses apply at once. ${left.rationale} / ${right.rationale}`,
   };
 }
 
@@ -82,7 +82,7 @@ export function evaluateExpression(
     return {
       verdict: 'review',
       obligations: [],
-      rationale: `ライセンス表記「${expression}」を SPDX 式として解釈できませんでした。原文の個別確認が必要です。`,
+      rationale: `The license string "${expression}" could not be parsed as an SPDX expression. The original license text needs individual review.`,
     };
   }
 

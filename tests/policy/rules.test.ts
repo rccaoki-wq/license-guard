@@ -40,13 +40,13 @@ describe('evaluateLicense', () => {
   it('AGPL-3.0 でも devDependency なら allowed（差別化の中核）', () => {
     const r = evaluateLicense('AGPL-3.0-only', ctx({ scope: 'dev' }));
     expect(r.verdict).toBe('allowed');
-    expect(r.rationale).toContain('成果物に含まれない');
+    expect(r.rationale).toContain('not part of the artifact');
   });
 
   it('GPL-3.0 は SaaS では allowed だが将来の配布リスクを説明する', () => {
     const r = evaluateLicense('GPL-3.0-only', ctx({ distributionModel: 'saas' }));
     expect(r.verdict).toBe('allowed');
-    expect(r.rationale).toContain('配布');
+    expect(r.rationale).toContain('on distribution');
   });
 
   it('GPL-3.0 はバイナリ配布で blocked', () => {
@@ -93,12 +93,34 @@ describe('evaluateLicense', () => {
   it('ライセンス表記なしは blocked（全権利留保のため）', () => {
     const r = evaluateLicense('', ctx());
     expect(r.verdict).toBe('blocked');
-    expect(r.rationale).toContain('全権利留保');
+    expect(r.rationale).toContain('all rights reserved');
   });
 
   it('rationale に助言的表現を含めない', () => {
     const r = evaluateLicense('AGPL-3.0-only', ctx());
-    expect(r.rationale).not.toContain('すべきです');
-    expect(r.rationale).not.toContain('おすすめ');
+    expect(r.rationale).not.toContain('you should');
+    expect(r.rationale).not.toContain('we recommend');
+  });
+});
+
+describe('evaluateLicense — 根拠条項の正確性', () => {
+  it('AGPL の SaaS は第13条（ネットワーク条項）を根拠にする', () => {
+    const r = evaluateLicense('AGPL-3.0-only', ctx({ distributionModel: 'saas' }));
+    expect(r.rationale).toContain('section 13');
+    expect(r.rationale).toContain('network');
+  });
+
+  it('AGPL のバイナリ配布は第13条を根拠にしない（配布条項が根拠）', () => {
+    for (const model of ['distributed-binary', 'on-prem-delivery', 'library-published'] as const) {
+      const r = evaluateLicense('AGPL-3.0-only', ctx({ distributionModel: model }));
+      expect(r.verdict).toBe('blocked');
+      expect(r.rationale).not.toContain('section 13');
+      expect(r.rationale).toContain('distribut');
+    }
+  });
+
+  it('AGPL の internal-only は第13条が適用されない旨を述べる', () => {
+    const r = evaluateLicense('AGPL-3.0-only', ctx({ distributionModel: 'internal-only' }));
+    expect(r.rationale).toContain('section 13');
   });
 });

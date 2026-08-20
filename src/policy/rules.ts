@@ -11,22 +11,32 @@ const DISTRIBUTING_MODELS = new Set<string>([
   'library-published',
 ]);
 
+/** 配布モデルの人間可読ラベル。理由文に埋め込む */
+const MODEL_LABEL: Record<string, string> = {
+  saas: 'hosted SaaS',
+  'distributed-binary': 'distributed binary or application',
+  'on-prem-delivery': 'software delivered to a customer environment',
+  'internal-only': 'internal use only',
+  'library-published': 'a published library',
+};
+
 /**
  * 単一の SPDX ライセンス識別子を、利用文脈のもとで判定する。
  * 純粋関数。外部 I/O を持たないこと。
  *
  * rationale は事実の提示に限定する。条項を引用し、判断を下す表現
- * （「〜すべき」「〜を推奨」等）を含めてはならない。
+ * （"you should" / "we recommend" 等）を含めてはならない。
  */
 export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyResult {
   const category = categorize(licenseId);
+  const model = MODEL_LABEL[ctx.distributionModel] ?? ctx.distributionModel;
 
   if (category === 'none') {
     return {
       verdict: 'blocked',
       obligations: [],
       rationale:
-        'ライセンスが宣言されていません。ライセンス表記のない著作物は既定で全権利留保であり、著作権者の許諾なく利用・複製・再配布する法的根拠がありません。',
+        'No license is declared. A work published without a license is by default all rights reserved, which leaves no grant permitting use, copying, or redistribution.',
     };
   }
 
@@ -36,7 +46,7 @@ export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyRe
     return {
       verdict: 'allowed',
       obligations: [],
-      rationale: `${licenseId} は ${ctx.scope} スコープの依存であり、配布される成果物に含まれないため、配布に伴う義務は発生しません。ただしコード生成器のように出力物へ影響しうるツールは個別の確認対象です。`,
+      rationale: `${licenseId} appears as a ${ctx.scope} dependency, so it is not part of the artifact you ship. Distribution-triggered obligations do not arise. Tools that emit code into your output, such as code generators, are a separate case worth checking individually.`,
     };
   }
 
@@ -45,7 +55,7 @@ export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyRe
       return {
         verdict: 'allowed',
         obligations: [],
-        rationale: `${licenseId} はパブリックドメイン相当であり、利用にあたっての義務はありません。`,
+        rationale: `${licenseId} is a public-domain dedication or equivalent. It carries no conditions on use.`,
       };
 
     case 'permissive': {
@@ -56,13 +66,13 @@ export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyRe
           verdict: 'allowed',
           obligations,
           rationale:
-            'Apache-2.0 第4条は著作権表示・ライセンス写し・NOTICE ファイルの保持を要求し、第3条は貢献者からの特許ライセンス許諾を定めています。ソース開示義務はありません。',
+            'Apache-2.0 section 4 requires retaining copyright notices, a copy of the license, and any NOTICE file. Section 3 grants a patent license from contributors. There is no source-disclosure obligation.',
         };
       }
       return {
         verdict: 'allowed',
         obligations,
-        rationale: `${licenseId} は著作権表示とライセンス条文の保持を要求します。ソース開示義務はありません。`,
+        rationale: `${licenseId} requires retaining the copyright notice and the license text. There is no source-disclosure obligation.`,
       };
     }
 
@@ -71,13 +81,13 @@ export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyRe
         return {
           verdict: 'review',
           obligations: ['source-disclosure', 'attribution'],
-          rationale: `${licenseId} は静的リンク時に、利用者が当該ライブラリを差し替えられる手段（オブジェクトファイルの提供等）の提供を要求します。静的リンクとして検出されたため、個別の確認対象です。`,
+          rationale: `${licenseId} requires that recipients be able to replace the library with a modified version. Under static linking this normally means shipping object files or equivalent relinking material. Static linking was assumed here, so this case needs individual review.`,
         };
       }
       return {
         verdict: 'allowed',
         obligations: ['source-disclosure', 'attribution'],
-        rationale: `${licenseId} は当該ライブラリ自体への改変を公開する義務を課しますが、動的リンクの場合、これを利用する側のコードには及びません。`,
+        rationale: `${licenseId} requires publishing modifications to the library itself, but under dynamic linking that obligation does not extend to the code that calls it.`,
       };
     }
 
@@ -86,13 +96,13 @@ export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyRe
         return {
           verdict: 'blocked',
           obligations: ['source-disclosure', 'same-license'],
-          rationale: `${licenseId} は、これを組み込んだ著作物を配布する場合、全体を同一ライセンスで頒布し対応するソースを提供することを要求します。配布モデルが「${ctx.distributionModel}」であるため、この義務が発生します。`,
+          rationale: `${licenseId} requires that a work incorporating it, when distributed, be licensed as a whole under the same terms with corresponding source made available. Your distribution model is ${model}, which triggers that obligation.`,
         };
       }
       return {
         verdict: 'allowed',
         obligations: [],
-        rationale: `${licenseId} の義務は「配布」を契機に発生します。現在の配布モデル「${ctx.distributionModel}」では配布に該当しないため義務は発生しません。将来オンプレミス提供や配布形態に転じた場合、全体のソース開示義務が発生します。`,
+        rationale: `${licenseId} triggers its obligations on distribution. Your distribution model is ${model}, which is not distribution, so no obligation arises today. Shipping this software later — on-premises delivery, a binary, or a published library — would trigger whole-work source disclosure.`,
       };
     }
 
@@ -101,13 +111,24 @@ export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyRe
         return {
           verdict: 'allowed',
           obligations: [],
-          rationale: `${licenseId} 第13条の義務は、ネットワーク経由で第三者に利用させる場合に発生します。配布モデルが「internal-only」であるため、この義務は発生しません。`,
+          rationale: `${licenseId} section 13 applies when users interact with the software remotely over a network, and its inherited GPL terms apply on distribution. Your distribution model is ${model}, so neither obligation arises.`,
         };
       }
+
+      // AGPL には2つの独立した引き金がある。SaaS はネットワーク条項（第13条）、
+      // 配布は GPL 由来の配布条項。根拠を取り違えないよう分岐する。
+      if (DISTRIBUTING_MODELS.has(ctx.distributionModel)) {
+        return {
+          verdict: 'blocked',
+          obligations: ['source-disclosure', 'same-license'],
+          rationale: `${licenseId} carries the GPL-3.0 copyleft terms it is built on: distributing a work that incorporates it requires licensing the whole work under the same terms with corresponding source made available. Your distribution model is ${model}, which is distribution and triggers that obligation. Section 13 additionally extends this over a network, so hosting the same code would not avoid it.`,
+        };
+      }
+
       return {
         verdict: 'blocked',
         obligations: ['source-disclosure', 'same-license'],
-        rationale: `${licenseId} 第13条は、改変版をネットワーク経由で利用させる場合に、利用者へ対応するソース全体を提供することを要求します。配布モデルが「${ctx.distributionModel}」であるため、この義務が発生します。`,
+        rationale: `${licenseId} section 13 requires that users interacting with a modified version over a network be offered the corresponding source of the whole work. Your distribution model is ${model}, which triggers that obligation. This is the clause that makes AGPL behave differently from GPL for hosted services.`,
       };
     }
 
@@ -115,14 +136,14 @@ export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyRe
       return {
         verdict: 'review',
         obligations: [],
-        rationale: `${licenseId} は OSI 承認のオープンソースライセンスではなく、商用提供や競合サービスの提供を制限する条項を含む場合があります。条項の個別確認が必要です。`,
+        rationale: `${licenseId} is not an OSI-approved open source license. Licenses in this family commonly restrict offering the software as a commercial or competing service. The specific terms need individual review.`,
       };
 
     case 'non-commercial':
       return {
         verdict: 'blocked',
         obligations: [],
-        rationale: `${licenseId} は非商用利用に限定されており、営利目的の利用を許諾していません。`,
+        rationale: `${licenseId} permits non-commercial use only and does not grant rights for commercial use.`,
       };
 
     case 'unknown':
@@ -130,7 +151,7 @@ export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyRe
       return {
         verdict: 'review',
         obligations: [],
-        rationale: `${licenseId} は既知のライセンス識別子と一致しませんでした。条文の個別確認が必要です。`,
+        rationale: `${licenseId} does not match a known license identifier. The license text needs individual review.`,
       };
   }
 }
