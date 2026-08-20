@@ -26,6 +26,10 @@ padding:14px 16px;margin-bottom:10px;background:var(--card)}
 border-radius:8px;color:var(--muted);font-size:.85rem}
 .limits ul{margin:6px 0 0;padding-left:20px}
 .err{color:var(--bad);font-weight:600;margin-top:14px}
+.honest{font-size:.9rem;color:var(--muted);margin:16px auto 12px;max-width:52ch;text-align:left}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.row input{flex:1 1 240px;max-width:320px;padding:11px 12px;border:1px solid var(--line);
+border-radius:8px;background:var(--card);color:var(--fg);font:inherit}
 `;
 
 const SCRIPT = `
@@ -42,6 +46,9 @@ function track(name) {
 }
 
 const LABEL = { allowed: 'No obligation', review: 'Needs review', blocked: 'Obligation triggered' };
+
+// 関心表明と一緒に送る集計。誰が困っているときに関心を持つのかを知るため
+let lastVerdictMix = null;
 
 function pkgHref(eco, name) {
   return eco === 'go' ? '/pkg/go/' + name : '/pkg/' + eco + '/' + encodeURIComponent(name);
@@ -89,6 +96,9 @@ $('run').addEventListener('click', async () => {
     $('limits').innerHTML = '<strong>Limits of this result</strong><ul>' +
       data.limitations.map((l) => '<li>' + esc(l) + '</li>').join('') + '</ul>';
 
+    lastVerdictMix = 'blocked=' + data.summary.blocked + ',review=' + data.summary.review +
+      ',allowed=' + data.summary.allowed;
+
     $('result').classList.remove('hidden');
     track('scan_succeeded');
   } catch (e) {
@@ -103,7 +113,35 @@ $('run').addEventListener('click', async () => {
 
 $('cta-paid-report').addEventListener('click', () => {
   track('cta_paid_report_clicked');
-  $('cta-thanks').classList.remove('hidden');
+  $('cta-form').classList.remove('hidden');
+  $('cta-paid-report').classList.add('hidden');
+  $('cta-email').focus();
+});
+
+$('cta-submit').addEventListener('click', async () => {
+  const email = $('cta-email').value.trim();
+  $('cta-error').classList.add('hidden');
+  if (!email) { $('cta-error').textContent = 'Enter an email address.'; $('cta-error').classList.remove('hidden'); return; }
+
+  const btn = $('cta-submit');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/interest', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, verdictMix: lastVerdictMix, distributionModel: $('model').value }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not send that.');
+    $('cta-form').querySelector('.row').classList.add('hidden');
+    $('cta-thanks').classList.remove('hidden');
+    track('cta_email_submitted');
+  } catch (e) {
+    $('cta-error').textContent = e.message;
+    $('cta-error').classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+  }
 });
 `;
 
@@ -125,8 +163,8 @@ export function renderPage(): string {
 <p class="hint">The same license produces different obligations for each of these. Most scanners ignore the distinction.</p>
 
 <label for="content">Manifest</label>
-<textarea id="content" placeholder="Paste package.json, requirements.txt, or go.mod"></textarea>
-<p class="hint">Pasted content is used to look up licenses and is not stored.</p>
+<textarea id="content" placeholder="Paste package-lock.json, package.json, requirements.txt, or go.mod"></textarea>
+<p class="hint"><strong>Paste a package-lock.json if you have one.</strong> It covers transitive dependencies — where problematic licenses usually arrive — and carries exact versions. Pasted content is used to look up licenses and is not stored.</p>
 
 <p style="margin-top:18px"><button class="btn" id="run">Check licenses</button></p>
 <p id="error" class="err hidden"></p>
@@ -136,9 +174,20 @@ export function renderPage(): string {
   <div id="findings"></div>
   <div class="limits" id="limits"></div>
   <div class="cta">
-    <p>Want this as an audit-ready PDF, covering transitive dependencies too?<br>The kind of thing due diligence and procurement ask for.</p>
-    <button class="btn" id="cta-paid-report">See the full report ($199)</button>
-    <p id="cta-thanks" class="hint hidden">Thanks &mdash; we will let you know when it is ready.</p>
+    <p>Want this as an audit-ready PDF &mdash; the kind of thing due diligence and procurement ask for?</p>
+    <button class="btn" id="cta-paid-report">Audit report &mdash; $199</button>
+
+    <div id="cta-form" class="hidden">
+      <p class="honest"><strong>This does not exist yet.</strong> I am working out whether it is worth building,
+      and the honest way to find out is to ask. Leave an address and I will tell you when it ships &mdash;
+      and ask what you would actually need from it. No list, no marketing.</p>
+      <div class="row">
+        <input id="cta-email" type="email" autocomplete="email" placeholder="you@company.com" aria-label="Email address">
+        <button class="btn" id="cta-submit">Send</button>
+      </div>
+      <p id="cta-error" class="err hidden"></p>
+      <p id="cta-thanks" class="hint hidden">Thanks. I will be in touch before anything is built.</p>
+    </div>
   </div>
 </div>
 

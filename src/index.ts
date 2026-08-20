@@ -11,6 +11,7 @@ import { buildLlmsTxt } from './seo/llms';
 import { handleMcpRequest } from './mcp/handler';
 import { createD1Recorder } from './mcp/telemetry';
 import { enforceRateLimit, type RateLimitBinding } from './ratelimit';
+import { isPlausibleEmail, normalizeEmail } from './interest';
 import { evaluateExpression } from './policy/engine';
 import { packagePath } from './ui/pkg';
 import { SITE_ORIGIN } from './ui/layout';
@@ -79,6 +80,7 @@ const TRACKED_EVENTS = new Set([
   'scan_succeeded',
   'scan_failed',
   'cta_paid_report_clicked',
+  'cta_email_submitted',
 ]);
 
 /** SEO ページはエッジで長めにキャッシュする */
@@ -340,6 +342,57 @@ app.post('/api/scan', async (c) => {
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Check failed.' }, 400);
   }
+});
+
+/**
+ * 有料レポートへの関心表明。
+ *
+ * クリック数だけでは支払意思を測れないため、連絡先を受け付ける。
+ * 保存するのは連絡先と、その人が見た判定の集計・選んでいた配布モデルだけ。
+ * パッケージ名とマニフェスト本文は保存しない。
+ */
+app.post('/api/interest', async (c) => {
+  const limited = await enforceRateLimit(c.env.API_LIMITER, c.req.raw);
+  if (limited) return limited;
+
+  let body: { email?: unknown; verdictMix?: unknown; distributionModel?: unknown; note?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Request body is not valid JSON.' }, 400);
+  }
+
+  const raw = typeof body.email === 'string' ? body.email : '';
+  if (!isPlausibleEmail(raw)) {
+    return c.json({ error: 'That does not look like an email address.' }, 400);
+  }
+
+  const str = (v: unknown, max: number) =>
+    typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, max) : null;
+
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO interest_signals (email, verdict_mix, distribution_model, note, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (email) DO UPDATE SET
+         verdict_mix = excluded.verdict_mix,
+         distribution_model = excluded.distribution_model,
+         note = COALESCE(excluded.note, interest_signals.note),
+         created_at = excluded.created_at`,
+    )
+      .bind(
+        normalizeEmail(raw),
+        str(body.verdictMix, 64),
+        str(body.distributionModel, 32),
+        str(body.note, 500),
+        Date.now(),
+      )
+      .run();
+  } catch {
+    return c.json({ error: 'Could not record that right now. Please try again later.' }, 503);
+  }
+
+  return c.json({ ok: true });
 });
 
 app.post('/api/track', async (c) => {

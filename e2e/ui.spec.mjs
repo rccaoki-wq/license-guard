@@ -55,7 +55,9 @@ const [trackReq] = await Promise.all([
 ]);
 check('CTA クリックが計測に送られる', !!trackReq);
 await page.waitForTimeout(300);
-check('CTA クリック後に応答が出る', await page.locator('#cta-thanks').isVisible());
+// クリック数だけでは支払意思を測れないため、押すと連絡先の入力を求める。
+// 詳しい検証は e2e/interest.spec.mjs 側で行う
+check('CTA クリックで連絡先フォームが出る', await page.locator('#cta-form').isVisible());
 
 // 配布モデルを変えると判定が変わる（AGPL）
 await page.fill('#content', JSON.stringify({ dependencies: { 'pyload-ng': '' } }));
