@@ -19,7 +19,9 @@ import type {
 const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
   npm: 'dynamic',
   pypi: 'dynamic',
+  // Go と Rust は既定で静的リンクされる
   go: 'static',
+  cargo: 'static',
 };
 
 /**
@@ -89,8 +91,9 @@ function limitationsFor(ecosystem: Ecosystem, findings: Finding[]): string[] {
         'Results are based on license metadata declared in the manifest. Code copied into your own source files is not detected.',
       ];
 
-  if (ecosystem === 'go') {
-    out.push('Go modules were evaluated assuming static linking.');
+  if (ecosystem === 'go' || ecosystem === 'cargo') {
+    const label = ecosystem === 'go' ? 'Go modules' : 'Rust crates';
+    out.push(`${label} were evaluated assuming static linking.`);
   }
 
   // 再ライセンス（Grafana の Apache-2.0 から AGPL-3.0 など）は実際に起きるので、

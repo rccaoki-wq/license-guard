@@ -13,7 +13,7 @@ const cache: CacheLike = {
 
 const fetchers = (map: Record<string, string | null>) => {
   const look = async (n: string) => ({ spdx: map[n] ?? null });
-  return { npm: look, pypi: look, go: look };
+  return { npm: look, pypi: look, go: look, cargo: look };
 };
 
 function post(body: unknown, headers: Record<string, string> = {}) {

@@ -141,6 +141,7 @@ describe('上限超過時のふるまい（scan 経由）', () => {
     npm: async () => ({ spdx: 'MIT' }),
     pypi: async () => ({ spdx: null }),
     go: async () => ({ spdx: null }),
+    cargo: async () => ({ spdx: null }),
   };
 
   it('拒否せず部分的な結果を返す', async () => {

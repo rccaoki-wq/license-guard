@@ -1,6 +1,7 @@
 import { fetchNpmLicense } from './npm';
 import { fetchPypiLicense } from './pypi';
 import { fetchGoLicense } from './clearlydefined';
+import { fetchCratesLicense } from './crates';
 import type { Dependency, Ecosystem, ResolvedFrom } from '../types';
 
 export interface Resolution {
@@ -31,12 +32,14 @@ export interface Fetchers {
   npm: Fetcher;
   pypi: Fetcher;
   go: Fetcher;
+  cargo: Fetcher;
 }
 
 export const defaultFetchers: Fetchers = {
   npm: (n, v) => fetchNpmLicense(n, v),
   pypi: (n, v) => fetchPypiLicense(n, v),
   go: (n, v) => fetchGoLicense(n, v),
+  cargo: (n, v) => fetchCratesLicense(n, v),
 };
 
 /** エコシステムごとの解決出典（固定版から採れた場合） */
@@ -44,6 +47,7 @@ const SOURCE: Record<Ecosystem, ResolvedFrom> = {
   npm: 'registry',
   pypi: 'registry',
   go: 'clearlydefined',
+  cargo: 'registry',
 };
 
 const RESOLVED_FROM_VALUES: readonly ResolvedFrom[] = [

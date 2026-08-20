@@ -7,12 +7,14 @@ const ECOSYSTEM_LABEL: Record<Ecosystem, string> = {
   npm: 'npm',
   pypi: 'PyPI',
   go: 'Go module',
+  cargo: 'Rust crate',
 };
 
 const MANIFEST_NAME: Record<Ecosystem, string> = {
-  npm: 'package.json',
+  npm: 'package-lock.json',
   pypi: 'requirements.txt',
-  go: 'go.mod',
+  go: 'go.sum',
+  cargo: 'Cargo.lock',
 };
 
 /** Go / Rust は静的リンクが既定 */
@@ -20,6 +22,7 @@ const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
   npm: 'dynamic',
   pypi: 'dynamic',
   go: 'static',
+  cargo: 'static',
 };
 
 export interface PackagePageInput {
@@ -81,7 +84,7 @@ ${
 ${scanCta(`This page covers one package. Your ${MANIFEST_NAME[ecosystem]} has many more.`)}
 
 <h2>How this was determined</h2>
-<p>The license was read from ${ecosystem === 'go' ? 'ClearlyDefined, which curates license data for Go modules' : `the ${eco} registry`}, then evaluated against each shipping model. ${ecosystem === 'go' ? 'Go dependencies are linked statically, which is assumed here.' : ''} Only the declared license is considered; code copied into a project's own source files is not detected by this method.</p>
+<p>The license was read from ${ecosystem === 'go' ? 'ClearlyDefined, which curates license data for Go modules' : ecosystem === 'cargo' ? 'crates.io' : `the ${eco} registry`}, then evaluated against each shipping model. ${ecosystem === 'go' || ecosystem === 'cargo' ? 'Dependencies in this ecosystem are linked statically, which is assumed here.' : ''} Only the declared license is considered; code copied into a project's own source files is not detected by this method.</p>
 `;
 
   return renderLayout({

@@ -163,8 +163,8 @@ export function renderPage(): string {
 <p class="hint">The same license produces different obligations for each of these. Most scanners ignore the distinction.</p>
 
 <label for="content">Manifest</label>
-<textarea id="content" placeholder="Paste package-lock.json, package.json, requirements.txt, or go.mod"></textarea>
-<p class="hint"><strong>Paste a package-lock.json if you have one.</strong> It covers transitive dependencies — where problematic licenses usually arrive — and carries exact versions. Pasted content is used to look up licenses and is not stored.</p>
+<textarea id="content" placeholder="Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock) or a manifest"></textarea>
+<p class="hint"><strong>Paste a lockfile if you have one.</strong> It covers transitive dependencies — where problematic licenses usually arrive — and carries exact versions. npm, PyPI, Go, and Rust are supported. Pasted content is used to look up licenses and is not stored.</p>
 
 <p style="margin-top:18px"><button class="btn" id="run">Check licenses</button></p>
 <p id="error" class="err hidden"></p>

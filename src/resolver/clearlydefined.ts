@@ -77,7 +77,12 @@ export async function fetchGoLicense(
 ): Promise<LicenseLookup> {
   if (version !== null) {
     const spdx = await declaredLicense(modulePath, version, fetchImpl);
-    return { spdx };
+    if (spdx !== null) return { spdx };
+    // 固定版が未収録でも諦めない。npm / PyPI と同じく別の版から採り、
+    // 「要求した版そのものではない」ことを fromLatest で必ず伝える。
+    // go.sum のように固定版が並ぶ入力では、ここが無いと大半が未解決になる。
+    const fallback = await anyHarvestedVersion(modulePath, version, fetchImpl);
+    return fallback === null ? { spdx: null } : { spdx: fallback, fromLatest: true };
   }
 
   const latest = await fetchLatestGoVersion(modulePath, fetchImpl);
@@ -86,21 +91,29 @@ export async function fetchGoLicense(
     if (spdx !== null) return { spdx };
   }
 
-  const versions = await fetchGoVersions(modulePath, fetchImpl);
-  const candidates = pickCandidates(
-    versions.filter((v) => v !== latest),
-    FALLBACK_CANDIDATES,
-  );
-  if (candidates.length === 0) return { spdx: null };
-
-  const results = await Promise.all(
-    candidates.map((v) => declaredLicense(modulePath, v, fetchImpl).catch(() => null)),
-  );
-
-  // 新しい順に並んでいるので、最初に見つかったものが最も新しい収録済みの版
-  const found = results.find((r) => r !== null) ?? null;
+  const found = await anyHarvestedVersion(modulePath, latest, fetchImpl);
   if (found === null) return { spdx: null };
 
   // 要求された対象そのものではない版から採ったことを呼び出し側へ伝える
   return { spdx: found, fromLatest: true };
+}
+
+/** 収録済みの版を範囲全体から探す。exclude は既に試した版 */
+async function anyHarvestedVersion(
+  modulePath: string,
+  exclude: string | null,
+  fetchImpl: typeof fetch,
+): Promise<string | null> {
+  const versions = await fetchGoVersions(modulePath, fetchImpl);
+  const candidates = pickCandidates(
+    versions.filter((v) => v !== exclude),
+    FALLBACK_CANDIDATES,
+  );
+  if (candidates.length === 0) return null;
+
+  const results = await Promise.all(
+    candidates.map((v) => declaredLicense(modulePath, v, fetchImpl).catch(() => null)),
+  );
+  // 新しい順に並んでいるので、最初に見つかったものが最も新しい収録済みの版
+  return results.find((r) => r !== null) ?? null;
 }

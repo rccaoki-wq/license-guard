@@ -45,7 +45,7 @@ const DISTRIBUTION_MODELS: readonly DistributionModel[] = [
   'library-published',
 ];
 
-const ECOSYSTEMS: readonly Ecosystem[] = ['npm', 'pypi', 'go'];
+const ECOSYSTEMS: readonly Ecosystem[] = ['npm', 'pypi', 'go', 'cargo'];
 
 /**
  * エコシステムごとのパッケージ名の形。
@@ -59,6 +59,7 @@ const NAME_PATTERN: Record<Ecosystem, RegExp> = {
   npm: /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-zA-Z0-9][a-zA-Z0-9._~-]*$/,
   pypi: /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
   go: /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(\/[A-Za-z0-9._~-]+)*$/i,
+  cargo: /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
 };
 
 function isValidPackageName(ecosystem: Ecosystem, name: string): boolean {
@@ -148,6 +149,7 @@ const API_LINKAGE: Record<Ecosystem, Linkage> = {
   npm: 'dynamic',
   pypi: 'dynamic',
   go: 'static',
+  cargo: 'static',
 };
 
 async function packageApi(

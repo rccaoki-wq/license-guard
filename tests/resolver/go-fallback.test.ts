@@ -50,14 +50,31 @@ describe('未収録の最新版からのフォールバック', () => {
     expect(r.fromLatest).toBe(true);
   });
 
-  it('固定版が指定されている場合は別の版で代用しない', async () => {
-    // 「この版のライセンスは？」に別の版の答えを返してはいけない
+  it('固定版が未収録なら別の版から採り、その旨を必ず示す', async () => {
+    // go.sum のように固定版が並ぶ入力では、諦めると大半が未解決になる。
+    // 代用は許すが「要求した版そのものではない」ことを黙ってはいけない。
     const f = vi.fn(async (url: string) => {
-      if (url.includes('@v/list')) throw new Error('版一覧を引いてはいけない');
-      return { ok: true, json: async () => ({ licensed: {} }) };
+      if (url.includes('@v/list')) return { ok: true, text: async () => 'v0.9.0\nv1.0.0\n' };
+      if (url.includes('/v1.0.0')) return { ok: true, json: async () => ({ licensed: {} }) };
+      return { ok: true, json: async () => ({ licensed: { declared: 'BSD-3-Clause' } }) };
     }) as unknown as typeof fetch;
 
-    expect((await fetchGoLicense('github.com/a/b', 'v1.0.0', f)).spdx).toBeNull();
+    const r = await fetchGoLicense('github.com/a/b', 'v1.0.0', f);
+    expect(r.spdx).toBe('BSD-3-Clause');
+    expect(r.fromLatest).toBe(true);
+  });
+
+  it('固定版が収録済みならその版の答えを使う（代用しない）', async () => {
+    const calls: string[] = [];
+    const f = vi.fn(async (url: string) => {
+      calls.push(url);
+      return { ok: true, json: async () => ({ licensed: { declared: 'MIT' } }) };
+    }) as unknown as typeof fetch;
+
+    const r = await fetchGoLicense('github.com/a/b', 'v1.0.0', f);
+    expect(r.spdx).toBe('MIT');
+    expect(r.fromLatest).toBeUndefined();
+    expect(calls).toHaveLength(1);
   });
 
   it('どの版でも解決できなければ null', async () => {

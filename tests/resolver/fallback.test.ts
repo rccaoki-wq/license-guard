@@ -54,6 +54,7 @@ describe('LicenseResolver の出所表示', () => {
       npm: async () => ({ spdx: 'MIT', fromLatest: true }),
       pypi: async () => ({ spdx: null }),
       go: async () => ({ spdx: null }),
+      cargo: async () => ({ spdx: null }),
     });
     expect(await r.resolve(dep())).toEqual({ spdx: 'MIT', resolvedFrom: 'registry-latest' });
   });
@@ -63,6 +64,7 @@ describe('LicenseResolver の出所表示', () => {
       npm: async () => ({ spdx: 'MIT' }),
       pypi: async () => ({ spdx: null }),
       go: async () => ({ spdx: null }),
+      cargo: async () => ({ spdx: null }),
     });
     expect(await r.resolve(dep())).toEqual({ spdx: 'MIT', resolvedFrom: 'registry' });
   });
@@ -81,6 +83,7 @@ describe('LicenseResolver の出所表示', () => {
       npm: async () => ({ spdx: 'MIT', fromLatest: true }),
       pypi: async () => ({ spdx: null }),
       go: async () => ({ spdx: null }),
+      cargo: async () => ({ spdx: null }),
     });
 
     await r.resolve(dep());

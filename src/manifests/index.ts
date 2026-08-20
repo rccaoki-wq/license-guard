@@ -2,6 +2,9 @@ import { parsePackageJson } from './npm';
 import { isPackageLock, parsePackageLock } from './npm-lock';
 import { isYarnLock, parseYarnLock } from './yarn-lock';
 import { isPnpmLock, parsePnpmLock } from './pnpm-lock';
+import { isCargoLock, isPythonLock, parseTomlPackages } from './toml-packages';
+import { isCargoToml, parseCargoToml } from './cargo-toml';
+import { isGoSum, parseGoSum } from './go-sum';
 import { parseRequirementsTxt } from './pypi';
 import { parseGoMod } from './gomod';
 import type { Dependency, Ecosystem } from '../types';
@@ -45,6 +48,14 @@ export function detectAndParse(content: string): ParsedManifest {
       : { ecosystem: 'npm', dependencies: parsePackageJson(trimmed) };
   } else if (/^module\s+\S+/m.test(trimmed) || /^require\s*\(/m.test(trimmed)) {
     result = { ecosystem: 'go', dependencies: parseGoMod(trimmed) };
+  } else if (isGoSum(trimmed)) {
+    result = { ecosystem: 'go', dependencies: parseGoSum(trimmed) };
+  } else if (isCargoLock(trimmed)) {
+    result = { ecosystem: 'cargo', dependencies: parseTomlPackages(trimmed, 'cargo') };
+  } else if (isPythonLock(trimmed)) {
+    result = { ecosystem: 'pypi', dependencies: parseTomlPackages(trimmed, 'pypi') };
+  } else if (isCargoToml(trimmed)) {
+    result = { ecosystem: 'cargo', dependencies: parseCargoToml(trimmed) };
   } else if (isPnpmLock(trimmed)) {
     result = { ecosystem: 'npm', dependencies: parsePnpmLock(trimmed) };
   } else if (isYarnLock(trimmed)) {
@@ -55,7 +66,7 @@ export function detectAndParse(content: string): ParsedManifest {
 
   if (result.dependencies.length === 0) {
     throw new Error(
-      'No dependencies were found. Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock) or a manifest (package.json, requirements.txt, go.mod).',
+      'No dependencies were found. Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock) or a manifest (package.json, requirements.txt, go.mod, Cargo.toml).',
     );
   }
 

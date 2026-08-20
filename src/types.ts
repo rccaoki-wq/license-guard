@@ -1,4 +1,4 @@
-export type Ecosystem = 'npm' | 'pypi' | 'go';
+export type Ecosystem = 'npm' | 'pypi' | 'go' | 'cargo';
 
 export type Scope = 'runtime' | 'dev' | 'build' | 'test' | 'optional';
 

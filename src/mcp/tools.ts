@@ -7,7 +7,7 @@ import { SITE_ORIGIN } from '../ui/layout';
 import { packagePath } from '../ui/pkg';
 import type { DistributionModel, Ecosystem, Linkage, Scope } from '../types';
 
-const ECOSYSTEMS: readonly Ecosystem[] = ['npm', 'pypi', 'go'];
+const ECOSYSTEMS: readonly Ecosystem[] = ['npm', 'pypi', 'go', 'cargo'];
 const MODELS: readonly DistributionModel[] = [
   'saas',
   'distributed-binary',
@@ -21,6 +21,7 @@ const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
   npm: 'dynamic',
   pypi: 'dynamic',
   go: 'static',
+  cargo: 'static',
 };
 
 const DISCLAIMER =
@@ -69,13 +70,13 @@ export const TOOL_DEFINITIONS = [
       properties: {
         ecosystem: {
           type: 'string',
-          enum: ['npm', 'pypi', 'go'],
+          enum: ['npm', 'pypi', 'go', 'cargo'],
           description: 'Package registry the dependency comes from.',
         },
         name: {
           type: 'string',
           description:
-            'Package name as written in the manifest, e.g. "express", "requests", or "github.com/gin-gonic/gin".',
+            'Package name as written in the manifest, e.g. "express", "requests", "github.com/gin-gonic/gin", or "serde".',
         },
         version: {
           type: 'string',
@@ -119,7 +120,7 @@ export const TOOL_DEFINITIONS = [
         content: {
           type: 'string',
           description:
-            'Full text of a package-lock.json, package.json, requirements.txt, or go.mod. The format is detected automatically. Prefer package-lock.json: it covers transitive dependencies, carries exact versions, and needs no registry lookups.',
+            'Full text of a lockfile or manifest. Accepted: package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, uv.lock, package.json, requirements.txt, go.mod, Cargo.toml. The format is detected automatically. Prefer a lockfile: it covers transitive dependencies and carries exact versions. package-lock.json is best of all, since it embeds licenses and needs no registry lookups.',
         },
         distribution_model: {
           type: 'string',

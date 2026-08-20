@@ -97,3 +97,29 @@ describe('空白区切りの緩い表記', () => {
     expect(evaluateExpression('BSD 2-Clause', ctx).verdict).toBe('allowed');
   });
 });
+
+describe('Cargo の旧スラッシュ記法', () => {
+  it('スラッシュを OR として解釈する', () => {
+    // Cargo は SPDX 式を採用する前、"/" を OR の意味で使っていた
+    expect(normalizeLicenseString('MIT/Apache-2.0')).toBe('(MIT OR Apache-2.0)');
+    expect(normalizeLicenseString('Unlicense/MIT')).toBe('(Unlicense OR MIT)');
+  });
+
+  it('両側が既知でなければ触らない', () => {
+    expect(normalizeLicenseString('Weird/Thing')).toBe('Weird/Thing');
+  });
+
+  it('MIT/X11 は従来どおり MIT に寄せる（別名として扱う）', () => {
+    expect(normalizeLicenseString('MIT/X11')).toBe('MIT');
+  });
+
+  it('判定が review でなく allowed になる', () => {
+    expect(evaluateExpression('Unlicense/MIT', ctx).verdict).toBe('allowed');
+    expect(evaluateExpression('MIT/Apache-2.0', ctx).verdict).toBe('allowed');
+  });
+
+  it('Unicode-3.0 を permissive として認識する', () => {
+    expect(categorize('Unicode-3.0')).toBe('permissive');
+    expect(evaluateExpression('(MIT OR Apache-2.0) AND Unicode-3.0', ctx).verdict).toBe('allowed');
+  });
+});

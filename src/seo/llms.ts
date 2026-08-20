@@ -25,7 +25,7 @@ manifests; code fragments copied into a project's own source are not detected.
   Tools: \`check_dependency_license\`, \`check_manifest_licenses\`, \`explain_license\`.
   Add with: \`claude mcp add licenseguard --transport http ${SITE_ORIGIN}/mcp\`
 - [Package JSON API](${SITE_ORIGIN}/api/pkg/npm/express?model=saas): GET
-  \`/api/pkg/{npm|pypi|go}/{name}?model={distribution_model}&scope={scope}\`
+  \`/api/pkg/{npm|pypi|go|cargo}/{name}?model={distribution_model}&scope={scope}\`
 - [Manifest scan API](${SITE_ORIGIN}/api/scan): POST \`{"content": "...", "distributionModel": "saas"}\`
 
 ## Key facts
@@ -41,6 +41,10 @@ manifests; code fragments copied into a project's own source are not detected.
   offering the software as a service.
 - A package declaring no license at all is all rights reserved by default, which is more
   restrictive than any open source license.
+- Lockfiles are the right input: problematic licenses usually arrive as transitive
+  dependencies rather than ones you added directly, and only a lockfile reveals those.
+  Accepted: package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock,
+  uv.lock, plus the plain manifests.
 
 ## Reference pages
 

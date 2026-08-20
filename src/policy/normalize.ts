@@ -66,6 +66,15 @@ export function normalizeLicenseString(raw: string): string {
   const alias = LEGACY_ALIASES[trimmed.toLowerCase()];
   if (alias) return alias;
 
+  // Cargo は SPDX 式を採用する前、"/" を OR の意味で使っていた
+  // （"MIT/Apache-2.0"）。両側が既知の識別子のときだけ OR として解釈する。
+  if (trimmed.includes('/')) {
+    const parts = trimmed.split('/').map((x) => x.trim());
+    if (parts.length >= 2 && parts.every((x) => x !== '' && categorize(x) !== 'unknown')) {
+      return `(${parts.join(' OR ')})`;
+    }
+  }
+
   // "BSD 2-Clause" のようにハイフンを空白で書いたもの。区切りを揃えた結果が
   // 既知の識別子になる場合のみ採用し、そうでなければ元の文字列を保つ。
   const hyphenated = trimmed.replace(/\s+/g, '-');

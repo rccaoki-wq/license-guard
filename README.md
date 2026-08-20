@@ -48,7 +48,15 @@ curl "https://license-guard.rcc-aoki.workers.dev/api/pkg/pypi/pyload-ng?model=sa
 
 **Phase 0（支払意思の検証）** — MCP サーバーと無料 Web ツールを公開済み。主戦場は検索ではなくエージェントの workflow なので、検証指標は CTA クリック率ではなく **MCP の導入数と継続呼び出し数**。GitHub App（Phase 1）は検証結果を見てから着手する。
 
-対応: npm / PyPI / Go modules。
+対応エコシステム: **npm / PyPI / Go modules / crates.io（Rust）**
+
+| 形式 | 推移的依存 | 外部照会 |
+|---|---|---|
+| `package-lock.json` | ○ | **不要**（ライセンスを内包） |
+| `pnpm-lock.yaml` / `yarn.lock` | ○ | 必要（共有キャッシュで逓減） |
+| `go.sum` | ○ | 必要 |
+| `Cargo.lock` / `poetry.lock` / `uv.lock` | ○ | 必要 |
+| `package.json` / `requirements.txt` / `go.mod` / `Cargo.toml` | ✗ 直接依存のみ | 必要 |
 
 **ロックファイルを渡すと推移的依存まで判定できます**（`package-lock.json` / `pnpm-lock.yaml` / `yarn.lock`）。
 このうち `package-lock.json` はライセンスを内包しているため外部照会が一切不要です。 ロックファイルは
