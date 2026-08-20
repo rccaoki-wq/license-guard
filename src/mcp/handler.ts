@@ -15,7 +15,26 @@ import { SITE_ORIGIN } from '../ui/layout';
 export interface HandlerContext extends ToolContext {
   /** 省略可。計測が無くてもサーバーは動作する */
   record?: Recorder;
+  /**
+   * 省略可。上流レジストリへ問い合わせるツールにのみ適用される。
+   * 制限に掛かった場合は 429 応答を返す。
+   */
+  rateLimit?: (weight: 'heavy' | 'light') => Promise<Response | null>;
 }
+
+/**
+ * ツールごとの重み。上流レジストリに触れないものは制限しない。
+ *
+ * ping・tools/list・initialize・explain_license は純粋な計算だけで
+ * 応答できる。これらを制限すると、実費のかからない操作で正当な利用者を
+ * 締め出すことになる。
+ */
+const TOOL_WEIGHT: Record<string, 'heavy' | 'light'> = {
+  // 最大 200 依存を解決しうる
+  check_manifest_licenses: 'heavy',
+  // 1 パッケージのみ
+  check_dependency_license: 'light',
+};
 
 const JSON_HEADERS = { 'content-type': 'application/json' };
 
@@ -80,6 +99,22 @@ async function dispatch(
       }
       if (!TOOL_DEFINITIONS.some((t) => t.name === name)) {
         return errorResponse(id, ERROR_CODES.INVALID_PARAMS, `Unknown tool: ${name}`);
+      }
+
+      const weight = TOOL_WEIGHT[name];
+      if (weight && ctx.rateLimit) {
+        const limited = await ctx.rateLimit(weight);
+        if (limited) {
+          return successResponse(id, {
+            content: [
+              {
+                type: 'text',
+                text: 'Rate limit exceeded. This is a free, unauthenticated service; please slow down and retry in a minute.',
+              },
+            ],
+            isError: true,
+          });
+        }
       }
 
       try {

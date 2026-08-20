@@ -10,12 +10,20 @@ import { buildRobotsTxt, buildSitemap, type SitemapPackage } from './seo/sitemap
 import { buildLlmsTxt } from './seo/llms';
 import { handleMcpRequest } from './mcp/handler';
 import { createD1Recorder } from './mcp/telemetry';
+import { enforceRateLimit, type RateLimitBinding } from './ratelimit';
 import { evaluateExpression } from './policy/engine';
 import { packagePath } from './ui/pkg';
 import { SITE_ORIGIN } from './ui/layout';
 import type { DistributionModel, Ecosystem, Linkage, Scope } from './types';
 
-type Env = { Bindings: { DB: D1Database } };
+type Env = {
+  Bindings: {
+    DB: D1Database;
+    /** レート制限バインディング。未設定の環境では素通りする */
+    SCAN_LIMITER?: RateLimitBinding;
+    API_LIMITER?: RateLimitBinding;
+  };
+};
 
 const app = new Hono<Env>();
 
@@ -74,7 +82,18 @@ const DISCLAIMER =
 
 app.get('/', (c) => c.html(renderPage(), 200, { 'cache-control': 'public, max-age=300' }));
 
-app.get('/healthz', (c) => c.json({ ok: true }));
+app.get('/healthz', (c) =>
+  c.json({
+    ok: true,
+    // どの保護が有効かを可視化する。秘匿情報は含まない
+    bindings: {
+      db: typeof c.env.DB?.prepare === 'function',
+      scanLimiter: typeof c.env.SCAN_LIMITER?.limit === 'function',
+      apiLimiter: typeof c.env.API_LIMITER?.limit === 'function',
+    },
+  }),
+);
+
 
 app.get('/robots.txt', (c) =>
   c.text(buildRobotsTxt(), 200, { 'cache-control': SEO_CACHE }),
@@ -100,9 +119,16 @@ function safeWaitUntil(c: Context<Env>): ((p: Promise<unknown>) => void) | undef
 }
 
 app.all('/mcp', (c) =>
+  // エンドポイント全体ではなくツール単位で制限する。ping や tools/list、
+  // explain_license は上流に触れないため制限すると正当な利用を妨げるだけ。
   handleMcpRequest(c.req.raw, {
     cache: new LicenseCache(c.env.DB),
     record: createD1Recorder(c.env.DB, safeWaitUntil(c)),
+    rateLimit: (weight) =>
+      enforceRateLimit(
+        weight === 'heavy' ? c.env.SCAN_LIMITER : c.env.API_LIMITER,
+        c.req.raw,
+      ),
   }),
 );
 
@@ -120,6 +146,10 @@ async function packageApi(
   ecosystem: Ecosystem,
   name: string,
 ): Promise<Response> {
+  // 1 パッケージのみなので上限は緩め
+  const limited = await enforceRateLimit(c.env.API_LIMITER, c.req.raw);
+  if (limited) return limited;
+
   const model = (c.req.query('model') ?? 'saas') as DistributionModel;
   const scope = (c.req.query('scope') ?? 'runtime') as Scope;
   const version = c.req.query('version') ?? null;
@@ -267,6 +297,10 @@ app.get('/pkg/:ecosystem/*', (c) => {
 });
 
 app.post('/api/scan', async (c) => {
+  // 1 リクエストで最大 200 依存を解決しうる、最も重い経路
+  const limited = await enforceRateLimit(c.env.SCAN_LIMITER, c.req.raw);
+  if (limited) return limited;
+
   let body: { content?: unknown; distributionModel?: unknown };
   try {
     body = await c.req.json();

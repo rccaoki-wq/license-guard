@@ -91,3 +91,42 @@ describe('fetchPypiLicense — 存在しないバージョンへのフォール�
     expect((await fetchPypiLicense('nope', '1.0.0', f)).spdx).toBeNull();
   });
 });
+
+describe('曖昧な classifier の扱い', () => {
+  it('"BSD License" は版を特定できないので info.license を優先する', async () => {
+    // 2-Clause か 3-Clause かは classifier からは決まらない
+    const f = mockFetch({
+      info: { license: 'BSD-2-Clause', classifiers: ['License :: OSI Approved :: BSD License'] },
+    });
+    expect((await fetchPypiLicense('old-pkg', null, f)).spdx).toBe('BSD-2-Clause');
+  });
+
+  it('info.license が緩い表記でも解釈する', async () => {
+    const f = mockFetch({
+      info: { license: 'BSD 2-Clause', classifiers: ['License :: OSI Approved :: BSD License'] },
+    });
+    expect((await fetchPypiLicense('old-pkg', null, f)).spdx).toBe('BSD-2-Clause');
+  });
+
+  it('手がかりが無ければ従来どおり BSD-3-Clause に寄せる', async () => {
+    const f = mockFetch({
+      info: { license: '', classifiers: ['License :: OSI Approved :: BSD License'] },
+    });
+    expect((await fetchPypiLicense('old-pkg', null, f)).spdx).toBe('BSD-3-Clause');
+  });
+
+  it('曖昧でない classifier は info.license より優先する', async () => {
+    // MIT License 分類子は一意に決まるので、自由記述より信頼できる
+    const f = mockFetch({
+      info: { license: 'see LICENSE', classifiers: ['License :: OSI Approved :: MIT License'] },
+    });
+    expect((await fetchPypiLicense('p', null, f)).spdx).toBe('MIT');
+  });
+
+  it('版を欠く GPL 分類子を最も制約の強い解釈に倒す', async () => {
+    const f = mockFetch({
+      info: { classifiers: ['License :: OSI Approved :: GNU General Public License (GPL)'] },
+    });
+    expect((await fetchPypiLicense('p', null, f)).spdx).toBe('GPL-3.0-only');
+  });
+});

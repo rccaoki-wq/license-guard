@@ -381,3 +381,83 @@ describe('バッチ', () => {
     expect(res.status).toBe(202);
   });
 });
+
+describe('レート制限はコストのかかるツールにのみ適用する', () => {
+  const limitedCtx = (calls: string[]) => ({
+    cache,
+    fetchers: fetchers({ a: 'MIT' }),
+    rateLimit: async (w: 'heavy' | 'light') => {
+      calls.push(w);
+      return new Response('limited', { status: 429 });
+    },
+  });
+
+  const noLimitCtx = (calls: string[]) => ({
+    cache,
+    fetchers: fetchers({ a: 'MIT' }),
+    rateLimit: async (w: 'heavy' | 'light') => {
+      calls.push(w);
+      return null;
+    },
+  });
+
+  const call = async (name: string, args: Record<string, unknown>, c: any) =>
+    (await (await handleMcpRequest(
+      post({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+      c,
+    )).json()) as any;
+
+  it('ping と tools/list は制限を消費しない', async () => {
+    const calls: string[] = [];
+    const c = noLimitCtx(calls);
+    await handleMcpRequest(post({ jsonrpc: '2.0', id: 1, method: 'ping' }), c);
+    await handleMcpRequest(post({ jsonrpc: '2.0', id: 2, method: 'tools/list' }), c);
+    expect(calls).toEqual([]);
+  });
+
+  it('explain_license は上流に触れないので制限しない', async () => {
+    const calls: string[] = [];
+    await call('explain_license', { license: 'MIT' }, noLimitCtx(calls));
+    expect(calls).toEqual([]);
+  });
+
+  it('check_dependency_license は light を消費する', async () => {
+    const calls: string[] = [];
+    await call(
+      'check_dependency_license',
+      { ecosystem: 'npm', name: 'a', distribution_model: 'saas' },
+      noLimitCtx(calls),
+    );
+    expect(calls).toEqual(['light']);
+  });
+
+  it('check_manifest_licenses は heavy を消費する', async () => {
+    const calls: string[] = [];
+    await call(
+      'check_manifest_licenses',
+      { content: '{"dependencies":{"a":"1.0.0"}}', distribution_model: 'saas' },
+      noLimitCtx(calls),
+    );
+    expect(calls).toEqual(['heavy']);
+  });
+
+  it('制限に掛かったら isError で伝える（プロトコルエラーにしない）', async () => {
+    const j = await call(
+      'check_dependency_license',
+      { ecosystem: 'npm', name: 'a', distribution_model: 'saas' },
+      limitedCtx([]),
+    );
+    expect(j.result.isError).toBe(true);
+    expect(j.result.content[0].text).toContain('Rate limit exceeded');
+    expect(j.error).toBeUndefined();
+  });
+
+  it('rateLimit が無くても動作する', async () => {
+    const j = await call(
+      'check_dependency_license',
+      { ecosystem: 'npm', name: 'a', distribution_model: 'saas' },
+      { cache, fetchers: fetchers({ a: 'MIT' }) },
+    );
+    expect(j.result.structuredContent.verdict).toBe('allowed');
+  });
+});

@@ -8,3 +8,25 @@ binding = "DB"
 database_name = "license-guard"
 database_id = "52de0a98-8bf0-4add-9a00-d97bdd08475b"
 migrations_dir = "migrations"
+
+# 無認証の公開エンドポイントのためのレート制限。
+# 依存数上限(200)・本文上限(100KB)・上流タイムアウト(5秒)で被害範囲は
+# 既に限定されているが、連続的な濫用は防げないため上限を設ける。
+#
+# 上流への外部リクエストを伴う経路は厳しく、静的な判定だけで返せる経路は
+# 緩くする。Cloudflare のロケーション単位でのカウントであり、厳密な会計
+# ではなく「permissive, eventually consistent」である点に留意。
+
+[[ratelimits]]
+name = "SCAN_LIMITER"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+[[ratelimits]]
+name = "API_LIMITER"
+namespace_id = "1002"
+  [ratelimits.simple]
+  limit = 120
+  period = 60

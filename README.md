@@ -59,6 +59,7 @@ npm run typecheck
 npm run smoke     # 実レジストリへの疎通確認
 npm run e2e       # 本番に対する E2E 6種
                   #   ui          Playwright で実ブラウザ
+                  #   a11y        アクセシビリティ
                   #   mcp         公式 MCP SDK クライアント
                   #   load        並列実行時の一貫性
                   #   adversarial 敵対的入力・境界値
