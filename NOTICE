@@ -1,0 +1,20 @@
+LicenseGuard
+Copyright 2026 LicenseGuard contributors
+
+This product includes software developed at LicenseGuard.
+
+This product depends on the following third-party components:
+
+  - hono (MIT License)
+    https://github.com/honojs/hono
+
+  - spdx-expression-parse (MIT License)
+    https://github.com/jslicense/spdx-expression-parse.js
+
+License data is sourced from:
+
+  - The npm registry (https://registry.npmjs.org)
+  - The Python Package Index (https://pypi.org)
+  - ClearlyDefined (https://clearlydefined.io), an Apache-2.0 licensed project
+  - The Go module proxy (https://proxy.golang.org)
+  - The SPDX License List (https://spdx.org/licenses/), CC-BY-3.0

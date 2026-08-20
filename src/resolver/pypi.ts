@@ -39,12 +39,16 @@ export async function fetchPypiLicense(
   version: string | null,
   fetchImpl: typeof fetch = fetch,
 ): Promise<string | null> {
-  const url =
-    version === null
-      ? `https://pypi.org/pypi/${encodeURIComponent(name)}/json`
-      : `https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version)}/json`;
+  const base = `https://pypi.org/pypi/${encodeURIComponent(name)}`;
 
-  const doc = await fetchJson<PypiDoc>(url, fetchImpl);
+  // 固定版が公開されていない場合（範囲指定を剥がした値など）は最新に落とす
+  let doc: PypiDoc | null = null;
+  if (version !== null) {
+    doc = await fetchJson<PypiDoc>(`${base}/${encodeURIComponent(version)}/json`, fetchImpl);
+  }
+  if (doc === null) {
+    doc = await fetchJson<PypiDoc>(`${base}/json`, fetchImpl);
+  }
   if (doc === null) return null;
 
   // PEP 639 の license_expression は正式な SPDX 式であり最も信頼できる。

@@ -55,9 +55,12 @@ function limitationsFor(ecosystem: Ecosystem, findings: Finding[]): string[] {
     out.push('Go modules were evaluated assuming static linking.');
   }
 
-  if (findings.some((f) => f.version === null)) {
+  // フォールバックの存在は結果から見分けられないため、常に伝える。
+  // 再ライセンス（Grafana の Apache-2.0 から AGPL-3.0 など）は実際に起きるので、
+  // 最新版で判定した可能性があることを黙っておくのは不誠実になる。
+  if (ecosystem !== 'go') {
     out.push(
-      'Dependencies given as version ranges were resolved against the latest published version, which may differ from what actually gets installed.',
+      'Version ranges, and pinned versions that were never published, are resolved against the latest release. Licenses do change between versions, so a pinned older version may carry different terms.',
     );
   }
 

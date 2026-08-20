@@ -9,6 +9,7 @@ import { findLicense } from './seo/catalog';
 import { buildRobotsTxt, buildSitemap, type SitemapPackage } from './seo/sitemap';
 import { buildLlmsTxt } from './seo/llms';
 import { handleMcpRequest } from './mcp/handler';
+import { createD1Recorder } from './mcp/telemetry';
 import { evaluateExpression } from './policy/engine';
 import { packagePath } from './ui/pkg';
 import { SITE_ORIGIN } from './ui/layout';
@@ -57,8 +58,24 @@ app.get('/llms.txt', (c) =>
 
 // --- MCP: ステートレス Streamable HTTP エンドポイント ---
 
+/**
+ * executionCtx は実行環境によっては存在せず、参照するだけで例外になる。
+ * 取れなければ waitUntil 無しに落とす（計測は同期的に走るだけで、機能は保たれる）。
+ */
+function safeWaitUntil(c: Context<Env>): ((p: Promise<unknown>) => void) | undefined {
+  try {
+    const ec = c.executionCtx;
+    return (p) => ec.waitUntil(p);
+  } catch {
+    return undefined;
+  }
+}
+
 app.all('/mcp', (c) =>
-  handleMcpRequest(c.req.raw, { cache: new LicenseCache(c.env.DB) }),
+  handleMcpRequest(c.req.raw, {
+    cache: new LicenseCache(c.env.DB),
+    record: createD1Recorder(c.env.DB, safeWaitUntil(c)),
+  }),
 );
 
 // --- 機械可読 API ---

@@ -68,3 +68,26 @@ describe('fetchPypiLicense', () => {
     await fetchPypiLicense('requests', '2.31.0', f);
   });
 });
+
+describe('fetchPypiLicense — 存在しないバージョンへのフォールバック', () => {
+  it('バージョン付きURLが404ならバージョン無しで再取得する', async () => {
+    const calls: string[] = [];
+    const f = vi.fn(async (url: string) => {
+      calls.push(url);
+      if (url.includes('/9.9.9/')) return { ok: false, json: async () => ({}) };
+      return {
+        ok: true,
+        json: async () => ({ info: { license_expression: 'BSD-3-Clause' } }),
+      };
+    }) as unknown as typeof fetch;
+
+    expect(await fetchPypiLicense('flask', '9.9.9', f)).toBe('BSD-3-Clause');
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toBe('https://pypi.org/pypi/flask/json');
+  });
+
+  it('バージョン無しでも取れなければ null', async () => {
+    const f = mockFetch({}, false);
+    expect(await fetchPypiLicense('nope', '1.0.0', f)).toBeNull();
+  });
+});

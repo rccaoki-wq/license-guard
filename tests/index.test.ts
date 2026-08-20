@@ -205,6 +205,21 @@ describe('エージェント向けルート', () => {
     expect(txt).toContain('section 13');
   });
 
+  it('executionCtx が無い環境でも /mcp が動く', async () => {
+    // waitUntil を取れない実行環境で例外にしないことの確認
+    const { env } = fakeEnv();
+    const res = await app.request(
+      '/mcp',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+  });
+
   it('POST /mcp は initialize に応答する', async () => {
     const { env } = fakeEnv();
     const res = await app.request(

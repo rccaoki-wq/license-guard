@@ -9,7 +9,13 @@ import {
   type JsonRpcRequest,
 } from './protocol';
 import { TOOL_DEFINITIONS, callTool, type ToolContext } from './tools';
+import type { Recorder } from './telemetry';
 import { SITE_ORIGIN } from '../ui/layout';
+
+export interface HandlerContext extends ToolContext {
+  /** 省略可。計測が無くてもサーバーは動作する */
+  record?: Recorder;
+}
 
 const JSON_HEADERS = { 'content-type': 'application/json' };
 
@@ -39,7 +45,7 @@ export function isSupportedProtocolHeader(value: string | null | undefined): boo
 
 async function dispatch(
   msg: JsonRpcRequest,
-  ctx: ToolContext,
+  ctx: HandlerContext,
 ): Promise<Record<string, unknown> | null> {
   // 通知には応答しない（呼び出し側が 202 を返す）
   if (isNotification(msg)) return null;
@@ -47,8 +53,17 @@ async function dispatch(
   const id = msg.id as string | number;
 
   switch (msg.method) {
-    case 'initialize':
+    case 'initialize': {
+      const info = msg.params?.['clientInfo'] as
+        | { name?: unknown; version?: unknown }
+        | undefined;
+      ctx.record?.({
+        event: 'initialize',
+        clientName: typeof info?.name === 'string' ? info.name : undefined,
+        clientVersion: typeof info?.version === 'string' ? info.version : undefined,
+      });
       return successResponse(id, initializeResult(msg.params?.['protocolVersion']));
+    }
 
     case 'ping':
       return successResponse(id, {});
@@ -68,11 +83,29 @@ async function dispatch(
       }
 
       try {
-        const result = await callTool(
-          name,
-          (args ?? {}) as Record<string, unknown>,
-          ctx,
-        );
+        const toolArgs = (args ?? {}) as Record<string, unknown>;
+        const result = await callTool(name, toolArgs, ctx);
+
+        // パッケージ名やマニフェスト本文は記録しない（telemetry.ts の方針）
+        const structured = result.structuredContent as
+          | { verdict?: unknown; summary?: { blocked?: unknown } }
+          | undefined;
+        ctx.record?.({
+          event: 'tool_call',
+          tool: name,
+          ecosystem: typeof toolArgs['ecosystem'] === 'string' ? toolArgs['ecosystem'] : undefined,
+          distributionModel:
+            typeof toolArgs['distribution_model'] === 'string'
+              ? toolArgs['distribution_model']
+              : undefined,
+          verdict:
+            typeof structured?.verdict === 'string'
+              ? structured.verdict
+              : result.isError
+                ? 'error'
+                : undefined,
+        });
+
         return successResponse(id, result);
       } catch (e) {
         // ツール実行時の失敗はプロトコルエラーではなく isError で返す
@@ -98,7 +131,7 @@ async function dispatch(
  */
 export async function handleMcpRequest(
   request: Request,
-  ctx: ToolContext,
+  ctx: HandlerContext,
 ): Promise<Response> {
   if (!isAllowedOrigin(request.headers.get('origin'))) {
     return new Response('Forbidden origin', { status: 403 });

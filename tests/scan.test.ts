@@ -111,4 +111,12 @@ describe('scan', () => {
     const result = await scan(content, 'saas', noopCache(), fetchers({ a: 'MIT' }));
     expect(result.limitations.some((l) => l.includes('direct dependencies'))).toBe(true);
   });
+
+  it('最新版へのフォールバックが起きうることを常に伝える', async () => {
+    const content = JSON.stringify({ dependencies: { a: '1.0.0' } });
+    const result = await scan(content, 'saas', noopCache(), fetchers({ a: 'MIT' }));
+    expect(result.limitations.some((l) => l.includes('Licenses do change between versions'))).toBe(
+      true,
+    );
+  });
 });

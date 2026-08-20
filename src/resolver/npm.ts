@@ -5,11 +5,6 @@ interface NpmVersionDoc {
   licenses?: Array<{ type?: string }>;
 }
 
-interface NpmPackageDoc {
-  'dist-tags'?: { latest?: string };
-  versions?: Record<string, NpmVersionDoc>;
-}
-
 function normalizeLicenseField(doc: NpmVersionDoc): string | null {
   if (typeof doc.license === 'string' && doc.license.trim() !== '') {
     return doc.license.trim();
@@ -27,23 +22,31 @@ function normalizeLicenseField(doc: NpmVersionDoc): string | null {
 
 /**
  * npm レジストリからライセンスを取得する。
- * version が null の場合は dist-tags.latest を用いる。
+ *
+ * パッケージ全体の文書ではなくバージョン単位のエンドポイントを叩く。
+ * 全体文書は全バージョンのメタデータを含み、typescript では 15MB を超えるため、
+ * Worker のタイムアウトと CPU 時間を使い切る。バージョン単位なら約 5KB。
+ *
+ * マニフェストの "^5.6.0" は範囲であってバージョンではない。剥がした値が
+ * 実際には公開されていないことがある（TypeScript の 5.6 系は 5.6.2 が初出）ため、
+ * 404 の場合は latest に落とす。存在する場合に latest を引かないのは、
+ * 再ライセンス（Grafana の Apache-2.0 から AGPL-3.0 など）があるため。
  */
 export async function fetchNpmLicense(
   name: string,
   version: string | null,
   fetchImpl: typeof fetch = fetch,
 ): Promise<string | null> {
-  const url = `https://registry.npmjs.org/${encodeURIComponent(name)}`;
+  const base = `https://registry.npmjs.org/${encodeURIComponent(name)}`;
 
-  const doc = await fetchJson<NpmPackageDoc>(url, fetchImpl);
+  let doc: NpmVersionDoc | null = null;
+  if (version !== null) {
+    doc = await fetchJson<NpmVersionDoc>(`${base}/${encodeURIComponent(version)}`, fetchImpl);
+  }
+  if (doc === null) {
+    doc = await fetchJson<NpmVersionDoc>(`${base}/latest`, fetchImpl);
+  }
   if (doc === null) return null;
 
-  const target = version ?? doc['dist-tags']?.latest;
-  if (!target) return null;
-
-  const versionDoc = doc.versions?.[target];
-  if (!versionDoc) return null;
-
-  return normalizeLicenseField(versionDoc);
+  return normalizeLicenseField(doc);
 }
