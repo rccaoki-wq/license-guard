@@ -33,13 +33,14 @@ describe('LicenseResolver', () => {
     const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn() });
 
     const out = await r.resolve(dep());
-    expect(out).toEqual({ spdx: 'MIT', resolvedFrom: 'cache' });
+    // キャッシュ経由でも出所（registry / registry-latest）を保つ
+    expect(out).toEqual({ spdx: 'MIT', resolvedFrom: 'registry' });
     expect(npm).not.toHaveBeenCalled();
   });
 
   it('キャッシュミス時はエコシステムに応じたフェッチャを呼びキャッシュに書く', async () => {
     const cache = stubCache();
-    const npm = vi.fn(async () => 'Apache-2.0');
+    const npm = vi.fn(async () => ({ spdx: 'Apache-2.0' }));
     const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn() });
 
     const out = await r.resolve(dep());
@@ -50,7 +51,7 @@ describe('LicenseResolver', () => {
 
   it('go は clearlydefined を出典として記録する', async () => {
     const cache = stubCache();
-    const go = vi.fn(async () => 'BSD-3-Clause');
+    const go = vi.fn(async () => ({ spdx: 'BSD-3-Clause' }));
     const r = new LicenseResolver(cache, { npm: vi.fn(), pypi: vi.fn(), go });
 
     const out = await r.resolve(
@@ -61,7 +62,7 @@ describe('LicenseResolver', () => {
 
   it('解決できない場合は unresolved を返す', async () => {
     const cache = stubCache();
-    const npm = vi.fn(async () => null);
+    const npm = vi.fn(async () => ({ spdx: null }));
     const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn() });
 
     const out = await r.resolve(dep());
@@ -81,7 +82,7 @@ describe('LicenseResolver', () => {
 
   it('resolveAll は全依存を解決する', async () => {
     const cache = stubCache();
-    const npm = vi.fn(async () => 'MIT');
+    const npm = vi.fn(async () => ({ spdx: 'MIT' }));
     const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn() });
 
     const out = await r.resolveAll([dep(), dep({ name: 'hono', version: '4.6.0' })]);

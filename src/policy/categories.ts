@@ -13,11 +13,30 @@ const EXACT: Record<string, LicenseCategory> = {
   zlib: 'permissive',
   'python-2.0': 'permissive',
   postgresql: 'permissive',
-  'mpl-2.0': 'weak-copyleft',
-  'epl-1.0': 'weak-copyleft',
-  'epl-2.0': 'weak-copyleft',
-  'cddl-1.0': 'weak-copyleft',
-  'cddl-1.1': 'weak-copyleft',
+  'blueoak-1.0.0': 'permissive',
+  // BSL-1.0 は Boost Software License（permissive）。
+  // Business Source License の BSL-1.1 / BUSL-1.1 とは別物なので取り違えないこと。
+  'bsl-1.0': 'permissive',
+  'artistic-2.0': 'permissive',
+  wtfpl: 'permissive',
+  ncsa: 'permissive',
+  x11: 'permissive',
+  libpng: 'permissive',
+  ruby: 'permissive',
+  'afl-3.0': 'permissive',
+  'apache-1.1': 'permissive',
+  'bsd-3-clause-clear': 'permissive',
+  'bsd-4-clause': 'permissive',
+  'unicode-dfs-2016': 'permissive',
+  'openssl': 'permissive',
+  'php-3.01': 'permissive',
+  'ms-pl': 'file-copyleft',
+  'mpl-2.0': 'file-copyleft',
+  'mpl-1.1': 'file-copyleft',
+  'epl-1.0': 'file-copyleft',
+  'epl-2.0': 'file-copyleft',
+  'cddl-1.0': 'file-copyleft',
+  'cddl-1.1': 'file-copyleft',
   'sspl-1.0': 'source-available',
   'busl-1.1': 'source-available',
   'bsl-1.1': 'source-available',
@@ -37,7 +56,7 @@ export function categorize(licenseId: string): LicenseCategory {
 
   // AGPL は GPL より先に判定する（"agpl" は "gpl" を含むため）
   if (id.startsWith('agpl-')) return 'network-copyleft';
-  if (id.startsWith('lgpl-')) return 'weak-copyleft';
+  if (id.startsWith('lgpl-')) return 'library-copyleft';
   if (id.startsWith('gpl-')) return 'strong-copyleft';
   if (id.startsWith('cc-by-nc')) return 'non-commercial';
   if (id.startsWith('cc-by-')) return 'permissive';

@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { renderPage } from './ui/page';
 import { renderLicenseIndex, renderLicensePage } from './ui/license';
 import { renderPackageNotFound, renderPackagePage } from './ui/pkg';
-import { scan } from './scan';
+import { scan, withProvenanceNote } from './scan';
 import { LicenseCache } from './resolver/cache';
 import { LicenseResolver } from './resolver';
 import { findLicense } from './seo/catalog';
@@ -30,6 +30,22 @@ const DISTRIBUTION_MODELS: readonly DistributionModel[] = [
 ];
 
 const ECOSYSTEMS: readonly Ecosystem[] = ['npm', 'pypi', 'go'];
+
+/**
+ * Go モジュールパスの形。ホスト名で始まりスキームを含まないこと。
+ * 検証しないと "https://evil.com/x" のような入力でも 200 を返し、
+ * 意味のないページと無駄な外部リクエストを生む。
+ */
+const GO_MODULE_PATH = /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(\/[A-Za-z0-9._~-]+)*$/i;
+
+/** URL のパーセントデコード。不正な並びで例外を投げさせない */
+function safeDecode(v: string): string | null {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return null;
+  }
+}
 
 const TRACKED_EVENTS = new Set([
   'scan_submitted',
@@ -130,11 +146,14 @@ async function packageApi(
     );
   }
 
-  const r = evaluateExpression(spdx, {
-    scope,
-    linkage: API_LINKAGE[ecosystem],
-    distributionModel: model,
-  });
+  const r = withProvenanceNote(
+    evaluateExpression(spdx, {
+      scope,
+      linkage: API_LINKAGE[ecosystem],
+      distributionModel: model,
+    }),
+    resolvedFrom,
+  );
 
   return c.json(
     {
@@ -154,9 +173,14 @@ async function packageApi(
   );
 }
 
-app.get('/api/pkg/go/*', (c) =>
-  packageApi(c, 'go', decodeURIComponent(c.req.path.slice('/api/pkg/go/'.length))),
-);
+app.get('/api/pkg/go/*', (c) => {
+  const name = safeDecode(c.req.path.slice('/api/pkg/go/'.length));
+  if (name === null) return c.json({ error: 'Malformed URL encoding.' }, 400);
+  if (!GO_MODULE_PATH.test(name)) {
+    return c.json({ error: 'Not a valid Go module path.' }, 400);
+  }
+  return packageApi(c, 'go', name);
+});
 
 app.get('/api/pkg/:ecosystem/:name', (c) => {
   const ecosystem = c.req.param('ecosystem') as Ecosystem;
@@ -226,7 +250,8 @@ async function packageRoute(
 }
 
 app.get('/pkg/go/*', (c) => {
-  const name = decodeURIComponent(c.req.path.slice('/pkg/go/'.length));
+  const name = safeDecode(c.req.path.slice('/pkg/go/'.length));
+  if (name === null || !GO_MODULE_PATH.test(name)) return c.notFound();
   return packageRoute(c, 'go', name);
 });
 
@@ -264,7 +289,8 @@ app.post('/api/scan', async (c) => {
 
   try {
     const result = await scan(content, distributionModel as DistributionModel, cache);
-    return c.json(result);
+    // 法的リスクの観点から、機械可読な出力にも必ず免責を載せる
+    return c.json({ ...result, disclaimer: DISCLAIMER });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Check failed.' }, 400);
   }

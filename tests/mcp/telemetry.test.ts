@@ -10,11 +10,10 @@ const cache: CacheLike = {
   async put() {},
 };
 
-const fetchers = (map: Record<string, string | null>) => ({
-  npm: async (n: string) => map[n] ?? null,
-  pypi: async (n: string) => map[n] ?? null,
-  go: async (n: string) => map[n] ?? null,
-});
+const fetchers = (map: Record<string, string | null>) => {
+  const look = async (n: string) => ({ spdx: map[n] ?? null });
+  return { npm: look, pypi: look, go: look };
+};
 
 function post(body: unknown) {
   return new Request('https://license-guard.rcc-aoki.workers.dev/mcp', {

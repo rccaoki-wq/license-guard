@@ -1,5 +1,6 @@
 import { fetchJson } from './http';
 import { fetchLatestGoVersion } from './goproxy';
+import type { LicenseLookup } from './index';
 
 /**
  * Go モジュールパスを ClearlyDefined の座標 (type/provider/namespace/name/revision)
@@ -27,18 +28,18 @@ export async function fetchGoLicense(
   modulePath: string,
   version: string | null,
   fetchImpl: typeof fetch = fetch,
-): Promise<string | null> {
+): Promise<LicenseLookup> {
   // ClearlyDefined の座標はリビジョン必須。未指定ならプロキシから最新版を引く。
   const revision = version ?? (await fetchLatestGoVersion(modulePath, fetchImpl));
-  if (revision === null) return null;
+  if (revision === null) return { spdx: null };
 
   const url = `https://api.clearlydefined.io/definitions/${toGoCoordinates(modulePath, revision)}`;
 
   const doc = await fetchJson<ClearlyDefinedDoc>(url, fetchImpl);
-  if (doc === null) return null;
+  if (doc === null) return { spdx: null };
 
   const declared = doc.licensed?.declared?.trim();
-  if (!declared || declared === 'NOASSERTION') return null;
+  if (!declared || declared === 'NOASSERTION') return { spdx: null };
 
-  return declared;
+  return { spdx: declared };
 }

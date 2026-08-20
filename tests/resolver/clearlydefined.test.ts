@@ -26,16 +26,16 @@ describe('toGoCoordinates', () => {
 describe('fetchGoLicense', () => {
   it('licensed.declared を返す', async () => {
     const f = mockFetch({ licensed: { declared: 'MIT' } });
-    expect(await fetchGoLicense('github.com/a/b', 'v1.0.0', f)).toBe('MIT');
+    expect((await fetchGoLicense('github.com/a/b', 'v1.0.0', f)).spdx).toBe('MIT');
   });
 
   it('NOASSERTION は null にする', async () => {
     const f = mockFetch({ licensed: { declared: 'NOASSERTION' } });
-    expect(await fetchGoLicense('github.com/a/b', 'v1.0.0', f)).toBeNull();
+    expect((await fetchGoLicense('github.com/a/b', 'v1.0.0', f)).spdx).toBeNull();
   });
 
   it('HTTP エラーなら null を返す', async () => {
-    expect(await fetchGoLicense('github.com/a/b', 'v1.0.0', mockFetch({}, false))).toBeNull();
+    expect((await fetchGoLicense('github.com/a/b', 'v1.0.0', mockFetch({}, false))).spdx).toBeNull();
   });
 });
 
@@ -50,13 +50,13 @@ describe('fetchGoLicense — バージョン未指定', () => {
       return { ok: true, json: async () => ({ licensed: { declared: 'MIT' } }) };
     }) as unknown as typeof fetch;
 
-    expect(await fetchGoLicense('github.com/gin-gonic/gin', null, f)).toBe('MIT');
+    expect((await fetchGoLicense('github.com/gin-gonic/gin', null, f)).spdx).toBe('MIT');
     expect(calls[0]).toContain('proxy.golang.org');
     expect(calls[1]).toContain('v1.12.0');
   });
 
   it('最新版も引けなければ null', async () => {
     const f = vi.fn(async () => ({ ok: false, json: async () => ({}) })) as unknown as typeof fetch;
-    expect(await fetchGoLicense('github.com/a/b', null, f)).toBeNull();
+    expect((await fetchGoLicense('github.com/a/b', null, f)).spdx).toBeNull();
   });
 });

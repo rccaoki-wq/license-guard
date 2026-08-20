@@ -1,4 +1,5 @@
 import { fetchJson } from './http';
+import type { LicenseLookup } from './index';
 
 /** PyPI trove classifier → SPDX 識別子 */
 const CLASSIFIER_TO_SPDX: Record<string, string> = {
@@ -34,23 +35,7 @@ interface PypiDoc {
   };
 }
 
-export async function fetchPypiLicense(
-  name: string,
-  version: string | null,
-  fetchImpl: typeof fetch = fetch,
-): Promise<string | null> {
-  const base = `https://pypi.org/pypi/${encodeURIComponent(name)}`;
-
-  // 固定版が公開されていない場合（範囲指定を剥がした値など）は最新に落とす
-  let doc: PypiDoc | null = null;
-  if (version !== null) {
-    doc = await fetchJson<PypiDoc>(`${base}/${encodeURIComponent(version)}/json`, fetchImpl);
-  }
-  if (doc === null) {
-    doc = await fetchJson<PypiDoc>(`${base}/json`, fetchImpl);
-  }
-  if (doc === null) return null;
-
+function extract(doc: PypiDoc): string | null {
   // PEP 639 の license_expression は正式な SPDX 式であり最も信頼できる。
   // Flask のような最新パッケージは classifiers を持たずこのフィールドのみを持つ。
   const expression = doc.info?.license_expression?.trim();
@@ -68,3 +53,29 @@ export async function fetchPypiLicense(
 
   return null;
 }
+
+export async function fetchPypiLicense(
+  name: string,
+  version: string | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<LicenseLookup> {
+  const base = `https://pypi.org/pypi/${encodeURIComponent(name)}`;
+
+  // 固定版が未公開、または情報を持たない場合は最新に落とす
+  if (version !== null) {
+    const pinned = await fetchJson<PypiDoc>(
+      `${base}/${encodeURIComponent(version)}/json`,
+      fetchImpl,
+    );
+    const spdx = pinned ? extract(pinned) : null;
+    if (spdx !== null) return { spdx };
+  }
+
+  const doc = await fetchJson<PypiDoc>(`${base}/json`, fetchImpl);
+  if (doc === null) return { spdx: null };
+
+  const spdx = extract(doc);
+  if (spdx === null) return { spdx: null };
+  return version === null ? { spdx } : { spdx, fromLatest: true };
+}
+

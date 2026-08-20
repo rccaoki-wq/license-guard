@@ -8,7 +8,7 @@ function mockFetch(body: unknown, ok = true) {
 describe('fetchNpmLicense', () => {
   it('指定バージョンのライセンスを返す', async () => {
     const f = mockFetch({ version: '4.18.2', license: 'MIT' });
-    expect(await fetchNpmLicense('express', '4.18.2', f)).toBe('MIT');
+    expect((await fetchNpmLicense('express', '4.18.2', f)).spdx).toBe('MIT');
   });
 
   it('version が null なら latest のライセンスを返す', async () => {
@@ -16,22 +16,22 @@ describe('fetchNpmLicense', () => {
       expect(url).toBe('https://registry.npmjs.org/foo/latest');
       return { ok: true, json: async () => ({ license: 'Apache-2.0' }) };
     }) as unknown as typeof fetch;
-    expect(await fetchNpmLicense('foo', null, f)).toBe('Apache-2.0');
+    expect((await fetchNpmLicense('foo', null, f)).spdx).toBe('Apache-2.0');
   });
 
   it('レガシーなオブジェクト形式の license を扱う', async () => {
     const f = mockFetch({ license: { type: 'BSD-3-Clause', url: 'x' } });
-    expect(await fetchNpmLicense('foo', '1.0.0', f)).toBe('BSD-3-Clause');
+    expect((await fetchNpmLicense('foo', '1.0.0', f)).spdx).toBe('BSD-3-Clause');
   });
 
   it('レガシーな licenses 配列を OR で結合する', async () => {
     const f = mockFetch({ licenses: [{ type: 'MIT' }, { type: 'GPL-2.0' }] });
-    expect(await fetchNpmLicense('foo', '1.0.0', f)).toBe('(MIT OR GPL-2.0)');
+    expect((await fetchNpmLicense('foo', '1.0.0', f)).spdx).toBe('(MIT OR GPL-2.0)');
   });
 
   it('ライセンス情報がなければ null を返す', async () => {
     const f = mockFetch({ version: '1.0.0' });
-    expect(await fetchNpmLicense('foo', '1.0.0', f)).toBeNull();
+    expect((await fetchNpmLicense('foo', '1.0.0', f)).spdx).toBeNull();
   });
 
   it('スコープ付き名を URL エンコードする', async () => {
@@ -53,7 +53,7 @@ describe('fetchNpmLicense — 存在しないバージョンへのフォール�
       return { ok: true, json: async () => ({ license: 'Apache-2.0' }) };
     }) as unknown as typeof fetch;
 
-    expect(await fetchNpmLicense('typescript', '5.6.0', f)).toBe('Apache-2.0');
+    expect((await fetchNpmLicense('typescript', '5.6.0', f)).spdx).toBe('Apache-2.0');
     expect(calls).toEqual([
       'https://registry.npmjs.org/typescript/5.6.0',
       'https://registry.npmjs.org/typescript/latest',
@@ -67,12 +67,12 @@ describe('fetchNpmLicense — 存在しないバージョンへのフォール�
       return { ok: true, json: async () => ({ license: 'MIT' }) };
     }) as unknown as typeof fetch;
 
-    expect(await fetchNpmLicense('relicensed', '1.0.0', f)).toBe('MIT');
+    expect((await fetchNpmLicense('relicensed', '1.0.0', f)).spdx).toBe('MIT');
     expect(calls).toHaveLength(1);
   });
 
   it('latest も取れなければ null', async () => {
-    expect(await fetchNpmLicense('foo', '9.9.9', mockFetch({}, false))).toBeNull();
+    expect((await fetchNpmLicense('foo', '9.9.9', mockFetch({}, false))).spdx).toBeNull();
   });
 
   it('巨大なパッケージ全体文書を取得しない', async () => {

@@ -8,12 +8,22 @@ export interface Resolution {
   resolvedFrom: ResolvedFrom;
 }
 
+/**
+ * 各レジストリ実装が返す形。
+ * fromLatest は、固定されたバージョン自身から採れず最新リリースに
+ * 落ちたことを示す。呼び出し側はこれを結果に明示する義務がある。
+ */
+export interface LicenseLookup {
+  spdx: string | null;
+  fromLatest?: boolean;
+}
+
 export interface CacheLike {
   get(dep: Dependency): Promise<{ spdx: string | null; source: string } | null>;
   put(dep: Dependency, spdx: string | null, source: string): Promise<void>;
 }
 
-export type Fetcher = (name: string, version: string | null) => Promise<string | null>;
+export type Fetcher = (name: string, version: string | null) => Promise<LicenseLookup>;
 
 export interface Fetchers {
   npm: Fetcher;
@@ -27,12 +37,19 @@ export const defaultFetchers: Fetchers = {
   go: (n, v) => fetchGoLicense(n, v),
 };
 
-/** エコシステムごとの解決出典 */
+/** エコシステムごとの解決出典（固定版から採れた場合） */
 const SOURCE: Record<Ecosystem, ResolvedFrom> = {
   npm: 'registry',
   pypi: 'registry',
   go: 'clearlydefined',
 };
+
+const RESOLVED_FROM_VALUES: readonly ResolvedFrom[] = [
+  'registry',
+  'registry-latest',
+  'clearlydefined',
+  'unresolved',
+];
 
 /** 外部 API への同時接続数の上限 */
 const CONCURRENCY = 8;
@@ -44,26 +61,31 @@ export class LicenseResolver {
   ) {}
 
   async resolve(dep: Dependency): Promise<Resolution> {
+    // キャッシュヒットでも出所は保つ。「固定版由来」か「最新版由来」かは
+    // 利用者の判断を変えるため、キャッシュを経ただけで失ってはならない。
     const cached = await this.cache.get(dep);
     if (cached) {
-      return { spdx: cached.spdx, resolvedFrom: 'cache' };
+      const from = RESOLVED_FROM_VALUES.includes(cached.source as ResolvedFrom)
+        ? (cached.source as ResolvedFrom)
+        : SOURCE[dep.ecosystem];
+      return { spdx: cached.spdx, resolvedFrom: from };
     }
 
-    let spdx: string | null = null;
+    let lookup: LicenseLookup;
     try {
-      spdx = await this.fetchers[dep.ecosystem](dep.name, dep.version);
+      lookup = await this.fetchers[dep.ecosystem](dep.name, dep.version);
     } catch {
       // ネットワーク障害等はブロック要因にせず unresolved に落とす
       return { spdx: null, resolvedFrom: 'unresolved' };
     }
 
-    if (spdx === null) {
+    if (lookup.spdx === null) {
       return { spdx: null, resolvedFrom: 'unresolved' };
     }
 
-    const source = SOURCE[dep.ecosystem];
-    await this.cache.put(dep, spdx, source);
-    return { spdx, resolvedFrom: source };
+    const source: ResolvedFrom = lookup.fromLatest ? 'registry-latest' : SOURCE[dep.ecosystem];
+    await this.cache.put(dep, lookup.spdx, source);
+    return { spdx: lookup.spdx, resolvedFrom: source };
   }
 
   async resolveAll(deps: Dependency[]): Promise<Resolution[]> {

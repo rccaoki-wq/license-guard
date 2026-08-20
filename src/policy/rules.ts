@@ -76,7 +76,20 @@ export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyRe
       };
     }
 
-    case 'weak-copyleft': {
+    // ファイル単位のコピーレフト。義務は改変したファイルにのみ及び、
+    // リンク形態には左右されない。MPL-2.0 第3.3条は、本ライセンスの要求を
+    // 満たす限り Larger Work を任意の条件で頒布することを明示的に許しており、
+    // LGPL のような再リンク手段の提供義務は存在しない。
+    case 'file-copyleft':
+      return {
+        verdict: 'allowed',
+        obligations: ['source-disclosure', 'attribution'],
+        rationale: `${licenseId} applies copyleft per file, not to your project as a whole. Files it covers must stay under it and their modifications must be published, while your own files may carry any terms you choose. It treats static and dynamic linking alike, so how you link makes no difference.`,
+      };
+
+    // ライブラリ単位のコピーレフト（LGPL 系）。利用者がライブラリを
+    // 差し替えられることを要求するため、リンク形態が結論を分ける。
+    case 'library-copyleft': {
       if (ctx.linkage === 'static') {
         return {
           verdict: 'review',

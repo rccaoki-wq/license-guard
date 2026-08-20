@@ -11,11 +11,10 @@ function noopCache(): CacheLike {
   };
 }
 
-const fetchers = (map: Record<string, string | null>) => ({
-  npm: async (n: string) => map[n] ?? null,
-  pypi: async (n: string) => map[n] ?? null,
-  go: async (n: string) => map[n] ?? null,
-});
+const fetchers = (map: Record<string, string | null>) => {
+  const look = async (n: string) => ({ spdx: map[n] ?? null });
+  return { npm: look, pypi: look, go: look };
+};
 
 describe('scan', () => {
   it('package.json を判定して findings を返す', async () => {
@@ -112,11 +111,11 @@ describe('scan', () => {
     expect(result.limitations.some((l) => l.includes('direct dependencies'))).toBe(true);
   });
 
-  it('最新版へのフォールバックが起きうることを常に伝える', async () => {
+  it('フォールバックが起きていないときは無用な警告を出さない', async () => {
+    // 常時警告するとオオカミ少年になる。実際に起きた場合のみ、
+    // 該当する項目の理由文と limitations の両方で開示する（audit-regressions.test.ts）
     const content = JSON.stringify({ dependencies: { a: '1.0.0' } });
     const result = await scan(content, 'saas', noopCache(), fetchers({ a: 'MIT' }));
-    expect(result.limitations.some((l) => l.includes('Licenses do change between versions'))).toBe(
-      true,
-    );
+    expect(result.limitations.some((l) => l.includes('latest release'))).toBe(false);
   });
 });

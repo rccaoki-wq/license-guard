@@ -36,6 +36,21 @@ const UNRESOLVED_RESULT: PolicyResult = {
     'The license could not be determined. Either none is declared, or the upstream registry did not return one. A work genuinely published without a license is all rights reserved by default, so the original source needs to be checked.',
 };
 
+/**
+ * 最新版に落として判定した場合、その事実を理由文に必ず付す。
+ * 固定版の結論として最新版の条件を黙って提示することは許されない。
+ */
+export function withProvenanceNote(
+  result: PolicyResult,
+  resolvedFrom: Finding['resolvedFrom'],
+): PolicyResult {
+  if (resolvedFrom !== 'registry-latest') return result;
+  return {
+    ...result,
+    rationale: `${result.rationale} Note: the pinned version declares no license of its own, or was never published, so this reflects the latest release. Verify against the repository for the version you actually use.`,
+  };
+}
+
 function summarize(findings: Finding[]): ScanSummary {
   return {
     total: findings.length,
@@ -55,12 +70,11 @@ function limitationsFor(ecosystem: Ecosystem, findings: Finding[]): string[] {
     out.push('Go modules were evaluated assuming static linking.');
   }
 
-  // フォールバックの存在は結果から見分けられないため、常に伝える。
   // 再ライセンス（Grafana の Apache-2.0 から AGPL-3.0 など）は実際に起きるので、
-  // 最新版で判定した可能性があることを黙っておくのは不誠実になる。
-  if (ecosystem !== 'go') {
+  // 最新版で判定したものがあることを黙っておくのは不誠実になる。
+  if (findings.some((f) => f.resolvedFrom === 'registry-latest')) {
     out.push(
-      'Version ranges, and pinned versions that were never published, are resolved against the latest release. Licenses do change between versions, so a pinned older version may carry different terms.',
+      'Some dependencies were resolved against the latest release because the pinned version declared no license of its own, or was never published. Those entries are marked. Licenses do change between versions.',
     );
   }
 
@@ -86,11 +100,14 @@ export async function scan(
     const policy =
       res.resolvedFrom === 'unresolved'
         ? UNRESOLVED_RESULT
-        : evaluateExpression(res.spdx, {
-            scope: dep.scope,
-            linkage,
-            distributionModel,
-          });
+        : withProvenanceNote(
+            evaluateExpression(res.spdx, {
+              scope: dep.scope,
+              linkage,
+              distributionModel,
+            }),
+            res.resolvedFrom,
+          );
 
     return {
       ...dep,

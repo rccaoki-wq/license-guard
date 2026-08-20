@@ -1,7 +1,7 @@
 import { evaluateExpression } from '../policy/engine';
 import { verdictMatrix } from '../policy/matrix';
 import { LicenseResolver, type CacheLike, type Fetchers } from '../resolver';
-import { scan } from '../scan';
+import { scan, withProvenanceNote } from '../scan';
 import { findLicense } from '../seo/catalog';
 import { SITE_ORIGIN } from '../ui/layout';
 import { packagePath } from '../ui/pkg';
@@ -204,11 +204,14 @@ async function checkDependency(
     );
   }
 
-  const result = evaluateExpression(spdx, {
-    scope,
-    linkage: DEFAULT_LINKAGE[ecosystem],
-    distributionModel: model,
-  });
+  const result = withProvenanceNote(
+    evaluateExpression(spdx, {
+      scope,
+      linkage: DEFAULT_LINKAGE[ecosystem],
+      distributionModel: model,
+    }),
+    resolvedFrom,
+  );
 
   const headline =
     result.verdict === 'blocked'

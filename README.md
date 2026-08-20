@@ -54,7 +54,7 @@ curl "https://license-guard.rcc-aoki.workers.dev/api/pkg/pypi/pyload-ng?model=sa
 
 ```bash
 npm install
-npm test          # 201 tests
+npm test          # 全テスト
 npm run typecheck
 npm run smoke     # 実レジストリへの疎通確認
 npm run dev       # http://localhost:8787

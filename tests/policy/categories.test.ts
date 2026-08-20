@@ -17,9 +17,11 @@ describe('categorize', () => {
     expect(categorize('GPL-2.0')).toBe('strong-copyleft');
   });
 
-  it('LGPL / MPL を weak-copyleft に分類する', () => {
-    expect(categorize('LGPL-3.0-only')).toBe('weak-copyleft');
-    expect(categorize('MPL-2.0')).toBe('weak-copyleft');
+  it('LGPL はライブラリ単位、MPL はファイル単位に分類する', () => {
+    // 両者はコピーレフトの及ぶ範囲もリンク形態への依存も異なるため、
+    // ひとまとめにすると MPL に LGPL の再リンク論理が誤適用される
+    expect(categorize('LGPL-3.0-only')).toBe('library-copyleft');
+    expect(categorize('MPL-2.0')).toBe('file-copyleft');
   });
 
   it('SSPL / BSL / Elastic を source-available に分類する', () => {

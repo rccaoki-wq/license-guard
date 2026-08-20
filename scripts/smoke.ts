@@ -4,7 +4,7 @@ import { fetchNpmLicense } from '../src/resolver/npm';
 import { fetchPypiLicense } from '../src/resolver/pypi';
 import { fetchGoLicense } from '../src/resolver/clearlydefined';
 
-const cases: Array<[string, Promise<string | null>, string]> = [
+const cases: Array<[string, Promise<{ spdx: string | null }>, string]> = [
   ['npm express@4.18.2', fetchNpmLicense('express', '4.18.2'), 'MIT'],
   ['npm @types/node', fetchNpmLicense('@types/node', null), 'MIT'],
   ['npm typescript@5.6.0 (unpublished pin)', fetchNpmLicense('typescript', '5.6.0'), 'Apache-2.0'],
@@ -19,7 +19,7 @@ const cases: Array<[string, Promise<string | null>, string]> = [
 let failed = 0;
 
 for (const [label, promise, expected] of cases) {
-  const actual = await promise;
+  const actual = (await promise).spdx;
   const ok = actual === expected;
   if (!ok) failed += 1;
   console.log(`${ok ? 'OK  ' : 'FAIL'} ${label} -> ${actual} (expected ${expected})`);

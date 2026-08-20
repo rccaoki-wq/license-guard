@@ -1,4 +1,5 @@
 import { fetchJson } from './http';
+import type { LicenseLookup } from './index';
 
 interface NpmVersionDoc {
   license?: string | { type?: string };
@@ -24,29 +25,40 @@ function normalizeLicenseField(doc: NpmVersionDoc): string | null {
  * npm レジストリからライセンスを取得する。
  *
  * パッケージ全体の文書ではなくバージョン単位のエンドポイントを叩く。
- * 全体文書は全バージョンのメタデータを含み、typescript では 15MB を超えるため、
+ * 全体文書は全バージョンのメタデータを含み、typescript では 15MB を超えるため
  * Worker のタイムアウトと CPU 時間を使い切る。バージョン単位なら約 5KB。
  *
- * マニフェストの "^5.6.0" は範囲であってバージョンではない。剥がした値が
- * 実際には公開されていないことがある（TypeScript の 5.6 系は 5.6.2 が初出）ため、
- * 404 の場合は latest に落とす。存在する場合に latest を引かないのは、
- * 再ライセンス（Grafana の Apache-2.0 から AGPL-3.0 など）があるため。
+ * 固定版から採れない場合に最新版へ落とす理由は 2 つある。
+ *
+ * 1. マニフェストの "^5.6.0" は範囲でありバージョンではない。剥がした値が
+ *    実際には未公開のことがある（TypeScript の 5.6 系は 5.6.2 が初出）。
+ * 2. 2014 年頃より前のパッケージには license フィールドの慣習が無く、
+ *    express@1.0.0 のような古い版は情報を持たない。ここで「不明」と返すと、
+ *    誰もが MIT と知っているパッケージが警告対象になり信頼を失う。
+ *
+ * 落とした事実は fromLatest で呼び出し側に伝える。再ライセンスは実在する
+ * （Grafana の Apache-2.0 から AGPL-3.0 など）ため、黙って最新版の結論を
+ * 固定版の結論として出すことは許されない。
  */
 export async function fetchNpmLicense(
   name: string,
   version: string | null,
   fetchImpl: typeof fetch = fetch,
-): Promise<string | null> {
+): Promise<LicenseLookup> {
   const base = `https://registry.npmjs.org/${encodeURIComponent(name)}`;
 
-  let doc: NpmVersionDoc | null = null;
   if (version !== null) {
-    doc = await fetchJson<NpmVersionDoc>(`${base}/${encodeURIComponent(version)}`, fetchImpl);
+    const pinned = await fetchJson<NpmVersionDoc>(
+      `${base}/${encodeURIComponent(version)}`,
+      fetchImpl,
+    );
+    const spdx = pinned ? normalizeLicenseField(pinned) : null;
+    if (spdx !== null) return { spdx };
   }
-  if (doc === null) {
-    doc = await fetchJson<NpmVersionDoc>(`${base}/latest`, fetchImpl);
-  }
-  if (doc === null) return null;
 
-  return normalizeLicenseField(doc);
+  const latest = await fetchJson<NpmVersionDoc>(`${base}/latest`, fetchImpl);
+  const spdx = latest ? normalizeLicenseField(latest) : null;
+
+  if (spdx === null) return { spdx: null };
+  return version === null ? { spdx } : { spdx, fromLatest: true };
 }

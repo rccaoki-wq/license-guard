@@ -23,7 +23,8 @@ export type Obligation =
 export type LicenseCategory =
   | 'public-domain'
   | 'permissive'
-  | 'weak-copyleft'
+  | 'file-copyleft'
+  | 'library-copyleft'
   | 'strong-copyleft'
   | 'network-copyleft'
   | 'source-available'
@@ -52,7 +53,16 @@ export interface PolicyResult {
   rationale: string;
 }
 
-export type ResolvedFrom = 'registry' | 'clearlydefined' | 'cache' | 'unresolved';
+/**
+ * ライセンス情報の出所。
+ * 'registry-latest' は、固定されたバージョン自身が情報を持たなかった
+ * （または未公開だった）ため最新リリースから採ったことを表す。
+ */
+export type ResolvedFrom =
+  | 'registry'
+  | 'registry-latest'
+  | 'clearlydefined'
+  | 'unresolved';
 
 export interface Finding extends Dependency {
   spdxExpression: string | null;

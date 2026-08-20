@@ -7,7 +7,8 @@ import type { LicenseCategory } from '../types';
 const CATEGORY_LABEL: Record<LicenseCategory, string> = {
   'public-domain': 'Public domain dedication',
   permissive: 'Permissive',
-  'weak-copyleft': 'Weak copyleft',
+  'file-copyleft': 'File-level copyleft',
+  'library-copyleft': 'Library-level copyleft',
   'strong-copyleft': 'Strong copyleft',
   'network-copyleft': 'Network copyleft',
   'source-available': 'Source available (not OSI-approved)',
@@ -89,7 +90,8 @@ export function renderLicenseIndex(): string {
   const order: LicenseCategory[] = [
     'public-domain',
     'permissive',
-    'weak-copyleft',
+    'file-copyleft',
+    'library-copyleft',
     'strong-copyleft',
     'network-copyleft',
     'source-available',
@@ -122,7 +124,7 @@ ${scanCta('Rather than look them up one by one, check what your project actually
   return renderLayout({
     title: 'Open source licenses: obligations for SaaS, distribution, and internal use',
     description:
-      'Reference for common open source licenses, grouped by how far their obligations reach — permissive, weak copyleft, strong copyleft, network copyleft, and source-available.',
+      'Reference for common open source licenses, grouped by how far their obligations reach — permissive, file-level and library-level copyleft, strong copyleft, network copyleft, and source-available.',
     path: '/licenses',
     body,
   });

@@ -3,6 +3,16 @@ import { parseRequirementsTxt } from './pypi';
 import { parseGoMod } from './gomod';
 import type { Dependency, Ecosystem } from '../types';
 
+/**
+ * 1リクエストで解決する直接依存の上限。
+ *
+ * 100KB のマニフェストには 4000 件以上の依存を詰められる。上限が無いと
+ * 1リクエストで数千の外部フェッチが走り、Worker のサブリクエスト上限と
+ * 実行時間を使い切るうえ、無認証の公開エンドポイントとして濫用される。
+ * 実在するプロジェクトの直接依存はまず 200 を超えない。
+ */
+export const MAX_DEPENDENCIES = 200;
+
 export interface ParsedManifest {
   ecosystem: Ecosystem;
   dependencies: Dependency[];
@@ -31,6 +41,13 @@ export function detectAndParse(content: string): ParsedManifest {
   if (result.dependencies.length === 0) {
     throw new Error(
       'No dependencies were found. Paste a package.json, requirements.txt, or go.mod.',
+    );
+  }
+
+  // 黙って切り詰めると「全部見た」と誤解されるため、明示的に断る
+  if (result.dependencies.length > MAX_DEPENDENCIES) {
+    throw new Error(
+      `This manifest declares ${result.dependencies.length} direct dependencies, above the limit of ${MAX_DEPENDENCIES}. Split it, or use the API for larger projects.`,
     );
   }
 

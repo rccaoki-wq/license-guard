@@ -1,5 +1,6 @@
 import parse from 'spdx-expression-parse';
 import { evaluateLicense } from './rules';
+import { normalizeLicenseString } from './normalize';
 import type { Obligation, PolicyContext, PolicyResult, Verdict } from '../types';
 
 const SEVERITY: Record<Verdict, number> = {
@@ -75,9 +76,12 @@ export function evaluateExpression(
     return evaluateLicense('', ctx);
   }
 
+  // 旧 npm 表記（"MIT/X11" 等）は SPDX として解釈できないため先に寄せる
+  const normalized = normalizeLicenseString(expression);
+
   let ast: Node;
   try {
-    ast = parse(expression) as Node;
+    ast = parse(normalized) as Node;
   } catch {
     return {
       verdict: 'review',
