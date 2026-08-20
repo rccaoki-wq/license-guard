@@ -87,14 +87,14 @@ describe('app', () => {
     expect(body.error).toContain('No dependencies were found');
   });
 
-  it('POST /api/scan は 100KB を超える入力を 413 で拒否する', async () => {
+  it('POST /api/scan は 4MB を超える入力を 413 で拒否する', async () => {
     const { env } = fakeEnv();
     const res = await app.request(
       '/api/scan',
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content: 'x'.repeat(100_001), distributionModel: 'saas' }),
+        body: JSON.stringify({ content: 'x'.repeat(4_000_001), distributionModel: 'saas' }),
       },
       env,
     );

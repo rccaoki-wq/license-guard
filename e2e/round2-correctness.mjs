@@ -7,9 +7,23 @@ const check = (n, ok, d = '') => {
   if (!ok) fail++;
 };
 
+/**
+ * 本サービス自身がレート制限を掛けているため、検証を連続実行すると 429 が返る。
+ * 制限そのものを試す意図ではないので、429 は待って一度だけ再試行する。
+ */
+async function fetchWithBackoff(url, init, tries = 3) {
+  for (let i = 0; i < tries; i++) {
+    const r = await fetch(url, init);
+    if (r.status !== 429 || i === tries - 1) return r;
+    await new Promise((res) => setTimeout(res, 20_000));
+  }
+  throw new Error('unreachable');
+}
+
+
 async function pkg(eco, name, model = 'saas') {
   // 名前はリテラルのまま渡す（スコープ付き npm と Go のパスを含む）
-  const r = await fetch(`${B}/api/pkg/${eco}/${name}?model=${model}`);
+  const r = await fetchWithBackoff(`${B}/api/pkg/${eco}/${name}?model=${model}`);
   return r.json();
 }
 
@@ -72,7 +86,7 @@ check('主要npmパッケージ20件に偽陽性なし', fp.length === 0, fp.joi
 
 console.log('\n--- SPDX 式の意味論 ---');
 async function explain(license, linkage = 'dynamic') {
-  const r = await fetch(`${B}/mcp`, {
+  const r = await fetchWithBackoff(`${B}/mcp`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -127,7 +141,7 @@ for (const [id, model, want] of [
   ['GPL-3.0-only', 'Hosted SaaS', 'No obligation'],
   ['MIT', 'Distributed binary', 'No obligation'],
 ]) {
-  const html = await (await fetch(`${B}/license/${encodeURIComponent(id)}`)).text();
+  const html = await (await fetchWithBackoff(`${B}/license/${encodeURIComponent(id)}`)).text();
   const row = html.split('<tr>').find((r) => r.includes(model));
   check(`/license/${id} の「${model}」行が ${want}`, !!row && row.includes(want));
 }
@@ -135,7 +149,7 @@ for (const [id, model, want] of [
 console.log('\n--- dev スコープが全ライセンスで免除されるか ---');
 let devFail = [];
 for (const l of ['AGPL-3.0-only', 'GPL-3.0-only', 'SSPL-1.0', 'CC-BY-NC-4.0', 'BUSL-1.1']) {
-  const r = await fetch(`${B}/mcp`, {
+  const r = await fetchWithBackoff(`${B}/mcp`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
       params: { name: 'explain_license', arguments: { license: l } } }),

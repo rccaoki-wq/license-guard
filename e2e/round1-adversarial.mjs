@@ -6,8 +6,22 @@ const check = (n, ok, d = '') => {
   if (!ok) fail++;
 };
 
+/**
+ * 本サービス自身がレート制限を掛けているため、検証を連続実行すると 429 が返る。
+ * 制限そのものを試す意図ではないので、429 は待って一度だけ再試行する。
+ */
+async function fetchWithBackoff(url, init, tries = 3) {
+  for (let i = 0; i < tries; i++) {
+    const r = await fetch(url, init);
+    if (r.status !== 429 || i === tries - 1) return r;
+    await new Promise((res) => setTimeout(res, 20_000));
+  }
+  throw new Error('unreachable');
+}
+
+
 async function scan(content, model = 'saas', extra = {}) {
-  const r = await fetch(`${B}/api/scan`, {
+  const r = await fetchWithBackoff(`${B}/api/scan`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(extra.headers || {}) },
     body: extra.raw !== undefined ? extra.raw : JSON.stringify({ content, distributionModel: model }),
@@ -88,7 +102,7 @@ for (const [label, extra] of httpCases) {
   check(`${label}: 5xx でない`, status < 500, `HTTP ${status}`);
 }
 
-console.log('\n--- 境界値（依存数の上限 200）---');
+console.log('\n--- 境界値（照会が必要な依存の上限 200）---');
 for (const [n, want] of [
   [199, 200],
   [200, 200],
@@ -100,16 +114,18 @@ for (const [n, want] of [
   check(`${n} 依存 -> HTTP ${want}`, status === want, `HTTP ${status}`);
 }
 
-console.log('\n--- 入力サイズ上限（100KB）---');
-check('100KB 超は 413', (await scan('a'.repeat(101_000))).status === 413);
+console.log('\n--- 入力サイズ上限（4MB）---');
+// package-lock.json は数百KB〜数MBになる。費用がかかるのは外部照会なので
+// サイズではなく MAX_LOOKUPS で抑える
+check('4MB 超は 413', (await scan('a'.repeat(4_100_000))).status === 413);
 check(
-  '100KB 未満は 413 でない',
-  (await scan('{"dependencies":{"x":"1.0.0"}}\n' + '#'.repeat(90_000))).status !== 413,
+  '200KB のロックファイル相当は通る',
+  (await scan('{"dependencies":{"x":"1.0.0"}}\n' + '#'.repeat(200_000))).status !== 413,
 );
 
 console.log('\n--- SPDX 式の極端系 ---');
 async function explain(license) {
-  const r = await fetch(`${B}/mcp`, {
+  const r = await fetchWithBackoff(`${B}/mcp`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -154,7 +170,7 @@ const mcpBad = [
   ['巨大バッチ', Array.from({ length: 200 }, (_, i) => ({ jsonrpc: '2.0', id: i, method: 'ping' }))],
 ];
 for (const [label, body] of mcpBad) {
-  const r = await fetch(`${B}/mcp`, {
+  const r = await fetchWithBackoff(`${B}/mcp`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),

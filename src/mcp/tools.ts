@@ -112,14 +112,14 @@ export const TOOL_DEFINITIONS = [
     name: 'check_manifest_licenses',
     title: 'Check a whole manifest',
     description:
-      'Scan an entire dependency manifest (package.json, requirements.txt, or go.mod) and report every dependency whose license creates an obligation for this shipping model. Use when reviewing a project as a whole, preparing for due diligence, or after a large dependency change. Only direct dependencies are evaluated.',
+      'Scan an entire dependency manifest and report every dependency whose license creates an obligation for this shipping model. Use when reviewing a project as a whole, preparing for due diligence, or after a large dependency change. Pass a package-lock.json when one exists: problematic licenses usually arrive as transitive dependencies rather than ones you added directly, and only a lockfile reveals those.',
     inputSchema: {
       type: 'object',
       properties: {
         content: {
           type: 'string',
           description:
-            'Full text of a package.json, requirements.txt, or go.mod. The format is detected automatically.',
+            'Full text of a package-lock.json, package.json, requirements.txt, or go.mod. The format is detected automatically. Prefer package-lock.json: it covers transitive dependencies, carries exact versions, and needs no registry lookups.',
         },
         distribution_model: {
           type: 'string',
@@ -254,8 +254,8 @@ async function checkManifest(
   if (!model || !MODELS.includes(model)) {
     return errorResult(`distribution_model must be one of: ${MODELS.join(', ')}`);
   }
-  if (new TextEncoder().encode(content).length > 100_000) {
-    return errorResult('content is too large (100KB limit).');
+  if (new TextEncoder().encode(content).length > 4_000_000) {
+    return errorResult('content is too large (4MB limit).');
   }
 
   let result;

@@ -7,8 +7,22 @@ const check = (n, ok, d = '') => {
   if (!ok) fail++;
 };
 
+/**
+ * 本サービス自身がレート制限を掛けているため、検証を連続実行すると 429 が返る。
+ * 制限そのものを試す意図ではないので、429 は待って一度だけ再試行する。
+ */
+async function fetchWithBackoff(url, init, tries = 3) {
+  for (let i = 0; i < tries; i++) {
+    const r = await fetch(url, init);
+    if (r.status !== 429 || i === tries - 1) return r;
+    await new Promise((res) => setTimeout(res, 20_000));
+  }
+  throw new Error('unreachable');
+}
+
+
 const j = async (path, init) => {
-  const r = await fetch(B + path, init);
+  const r = await fetchWithBackoff(B + path, init);
   return { r, body: await r.json().catch(() => null) };
 };
 
@@ -21,7 +35,7 @@ for (const [eco, name, model] of [
 ]) {
   const api = (await j(`/api/pkg/${eco}/${name}?model=${model}`)).body;
 
-  const mcpRes = await fetch(`${B}/mcp`, {
+  const mcpRes = await fetchWithBackoff(`${B}/mcp`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -36,7 +50,7 @@ for (const [eco, name, model] of [
     api.license === mcp.license && api.verdict === mcp.verdict,
     `API=${api.license}/${api.verdict} MCP=${mcp.license}/${mcp.verdict}`);
 
-  const html = await (await fetch(`${B}/pkg/${eco}/${name}`)).text();
+  const html = await (await fetchWithBackoff(`${B}/pkg/${eco}/${name}`)).text();
   const shownLicense = api.license && html.includes(api.license);
   check(`${eco}/${name}: HTMLページも同じライセンスを示す`, !!shownLicense);
 }
@@ -64,21 +78,21 @@ const shapes = runs.map((x) => JSON.stringify(x.body.findings.map((f) => [f.name
 check('3回とも同一の結果', new Set(shapes).size === 1);
 
 console.log('\n--- HTTP セマンティクス ---');
-const home = await fetch(`${B}/`);
+const home = await fetchWithBackoff(`${B}/`);
 check('/ は text/html', (home.headers.get('content-type') || '').includes('text/html'));
 check('/ に cache-control がある', !!home.headers.get('cache-control'));
 
-const sm = await fetch(`${B}/sitemap.xml`);
+const sm = await fetchWithBackoff(`${B}/sitemap.xml`);
 check('sitemap は xml', (sm.headers.get('content-type') || '').includes('xml'));
 
-const lic = await fetch(`${B}/license/MIT`);
+const lic = await fetchWithBackoff(`${B}/license/MIT`);
 check('ライセンスページは長めにキャッシュされる',
   (lic.headers.get('cache-control') || '').includes('s-maxage'));
 
-const apiRes = await fetch(`${B}/api/pkg/npm/express?model=saas`);
+const apiRes = await fetchWithBackoff(`${B}/api/pkg/npm/express?model=saas`);
 check('/api/pkg は application/json', (apiRes.headers.get('content-type') || '').includes('json'));
 
-const unresolved = await fetch(`${B}/api/pkg/npm/this-package-surely-does-not-exist-xyz-9910`);
+const unresolved = await fetchWithBackoff(`${B}/api/pkg/npm/this-package-surely-does-not-exist-xyz-9910`);
 const uc = unresolved.headers.get('cache-control') || '';
 check('未解決の結果は短命キャッシュ', uc.includes('max-age=300'), uc);
 
@@ -91,42 +105,42 @@ for (const [p, want] of [
   ['/api/pkg/npm/', 400],
   ['/pkg/', 404],
 ]) {
-  const r = await fetch(B + p);
+  const r = await fetchWithBackoff(B + p);
   check(`${p} -> ${want}`, r.status === want, `HTTP ${r.status}`);
 }
 
 console.log('\n--- HEAD / OPTIONS ---');
-const head = await fetch(`${B}/`, { method: 'HEAD' });
+const head = await fetchWithBackoff(`${B}/`, { method: 'HEAD' });
 check('HEAD / が 5xx にならない', head.status < 500, `HTTP ${head.status}`);
-const opts = await fetch(`${B}/api/scan`, { method: 'OPTIONS' });
+const opts = await fetchWithBackoff(`${B}/api/scan`, { method: 'OPTIONS' });
 check('OPTIONS が 5xx にならない', opts.status < 500, `HTTP ${opts.status}`);
-const putScan = await fetch(`${B}/api/scan`, { method: 'PUT' });
+const putScan = await fetchWithBackoff(`${B}/api/scan`, { method: 'PUT' });
 check('PUT /api/scan が 5xx にならない', putScan.status < 500, `HTTP ${putScan.status}`);
 
 console.log('\n--- sitemap と実ページの整合 ---');
-const smXml = await (await fetch(`${B}/sitemap.xml`)).text();
+const smXml = await (await fetchWithBackoff(`${B}/sitemap.xml`)).text();
 const locs = [...smXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
 check('sitemap に URL がある', locs.length > 20, `${locs.length} 件`);
 check('全 URL が自サイト', locs.every((u) => u.startsWith(B)), '');
 const sample = locs.filter((u) => u.includes('/pkg/')).slice(0, 5);
 let bad = [];
 for (const u of sample) {
-  const r = await fetch(u);
+  const r = await fetchWithBackoff(u);
   if (r.status !== 200) bad.push(`${u}=${r.status}`);
 }
 check('sitemap のパッケージページが 200', bad.length === 0, bad.join(','));
 
 console.log('\n--- llms.txt の記述が実際に動くか ---');
-const llms = await (await fetch(`${B}/llms.txt`)).text();
+const llms = await (await fetchWithBackoff(`${B}/llms.txt`)).text();
 const apiExample = llms.match(/\((https:\/\/[^)]*\/api\/pkg\/[^)]+)\)/)?.[1];
 check('llms.txt に API の実例がある', !!apiExample, apiExample || '');
 if (apiExample) {
-  const r = await fetch(apiExample);
+  const r = await fetchWithBackoff(apiExample);
   check('その実例が実際に 200 を返す', r.status === 200, `HTTP ${r.status}`);
 }
 const mcpUrl = llms.match(/\((https:\/\/[^)]*\/mcp)\)/)?.[1];
 if (mcpUrl) {
-  const r = await fetch(mcpUrl, {
+  const r = await fetchWithBackoff(mcpUrl, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
   });
@@ -147,7 +161,7 @@ for (const [path, jsonCheck] of disclaimerChecks) {
     const { body } = await j(path);
     check(`${path} に免責`, jsonCheck(body));
   } else {
-    const t = await (await fetch(B + path)).text();
+    const t = await (await fetchWithBackoff(B + path)).text();
     check(`${path} に免責`, t.includes('not legal advice'));
   }
 }

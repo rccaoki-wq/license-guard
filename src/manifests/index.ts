@@ -1,17 +1,21 @@
 import { parsePackageJson } from './npm';
+import { isPackageLock, parsePackageLock } from './npm-lock';
 import { parseRequirementsTxt } from './pypi';
 import { parseGoMod } from './gomod';
 import type { Dependency, Ecosystem } from '../types';
 
 /**
- * 1リクエストで解決する直接依存の上限。
+ * 上流への照会が必要な依存の上限。
  *
- * 100KB のマニフェストには 4000 件以上の依存を詰められる。上限が無いと
- * 1リクエストで数千の外部フェッチが走り、Worker のサブリクエスト上限と
- * 実行時間を使い切るうえ、無認証の公開エンドポイントとして濫用される。
- * 実在するプロジェクトの直接依存はまず 200 を超えない。
+ * 費用がかかるのは外部フェッチであって、依存の総数ではない。
+ * ロックファイルはライセンスを内包しており照会が一切要らないため、
+ * 数千件を含んでいてもこの上限には掛からない。
+ *
+ * 上限が無いと 1 リクエストで数千の外部フェッチが走り、Worker の
+ * サブリクエスト上限と実行時間を使い切るうえ、無認証の公開
+ * エンドポイントとして濫用される。
  */
-export const MAX_DEPENDENCIES = 200;
+export const MAX_LOOKUPS = 200;
 
 export interface ParsedManifest {
   ecosystem: Ecosystem;
@@ -31,7 +35,11 @@ export function detectAndParse(content: string): ParsedManifest {
   let result: ParsedManifest;
 
   if (trimmed.startsWith('{')) {
-    result = { ecosystem: 'npm', dependencies: parsePackageJson(trimmed) };
+    // package-lock.json は推移的依存とライセンスの両方を持つ上位互換
+    const doc: unknown = JSON.parse(trimmed);
+    result = isPackageLock(doc)
+      ? { ecosystem: 'npm', dependencies: parsePackageLock(trimmed) }
+      : { ecosystem: 'npm', dependencies: parsePackageJson(trimmed) };
   } else if (/^module\s+\S+/m.test(trimmed) || /^require\s*\(/m.test(trimmed)) {
     result = { ecosystem: 'go', dependencies: parseGoMod(trimmed) };
   } else {
@@ -45,9 +53,15 @@ export function detectAndParse(content: string): ParsedManifest {
   }
 
   // 黙って切り詰めると「全部見た」と誤解されるため、明示的に断る
-  if (result.dependencies.length > MAX_DEPENDENCIES) {
+  const lookups = result.dependencies.filter((d) => !d.declaredLicense).length;
+  if (lookups > MAX_LOOKUPS) {
+    // 既にロックファイルを送っている相手に「ロックファイルを送れ」と返さない
+    const alreadyLockfile = result.dependencies.some((d) => d.declaredLicense);
+    const advice = alreadyLockfile
+      ? 'Most entries in this lockfile carry no license of their own, so each needs a registry lookup. Regenerating it with a current npm version records licenses inline.'
+      : 'Send a package-lock.json instead — it carries licenses inline, so no lookups are needed and transitive dependencies are covered too.';
     throw new Error(
-      `This manifest declares ${result.dependencies.length} direct dependencies, above the limit of ${MAX_DEPENDENCIES}. Split it, or use the API for larger projects.`,
+      `This manifest needs ${lookups} registry lookups, above the limit of ${MAX_LOOKUPS}. ${advice}`,
     );
   }
 

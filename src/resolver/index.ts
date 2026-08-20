@@ -45,6 +45,7 @@ const SOURCE: Record<Ecosystem, ResolvedFrom> = {
 };
 
 const RESOLVED_FROM_VALUES: readonly ResolvedFrom[] = [
+  'lockfile',
   'registry',
   'registry-latest',
   'clearlydefined',
@@ -61,6 +62,12 @@ export class LicenseResolver {
   ) {}
 
   async resolve(dep: Dependency): Promise<Resolution> {
+    // ロックファイルに記録された値は、実際に導入される版そのものの情報。
+    // 上流に問い合わせる理由が無く、レジストリより確かでもある。
+    if (dep.declaredLicense) {
+      return { spdx: dep.declaredLicense, resolvedFrom: 'lockfile' };
+    }
+
     // キャッシュは最適化であり、その失敗が解決処理を壊してはならない。
     // D1 のクォータ枯渇などで読み書きが落ちても、レジストリ照会は続行する。
     const cached = await this.cache.get(dep).catch(() => null);

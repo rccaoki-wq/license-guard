@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import app from '../src/index';
-import { detectAndParse, MAX_DEPENDENCIES } from '../src/manifests';
+import { detectAndParse, MAX_LOOKUPS } from '../src/manifests';
 import { scan } from '../src/scan';
 import type { CacheLike } from '../src/resolver';
 
@@ -35,10 +35,10 @@ const noopCache: CacheLike = {
   async put() {},
 };
 
-describe('監査#3 依存数の上限', () => {
+describe('監査#3 照会が必要な依存数の上限', () => {
   it('上限を超えるマニフェストを黙って切り詰めず拒否する', () => {
     const deps: Record<string, string> = {};
-    for (let i = 0; i <= MAX_DEPENDENCIES; i++) deps[`pkg-${i}`] = '1.0.0';
+    for (let i = 0; i <= MAX_LOOKUPS; i++) deps[`pkg-${i}`] = '1.0.0';
     expect(() => detectAndParse(JSON.stringify({ dependencies: deps }))).toThrow(
       /above the limit/,
     );
@@ -46,15 +46,25 @@ describe('監査#3 依存数の上限', () => {
 
   it('上限ちょうどは通す', () => {
     const deps: Record<string, string> = {};
-    for (let i = 0; i < MAX_DEPENDENCIES; i++) deps[`pkg-${i}`] = '1.0.0';
+    for (let i = 0; i < MAX_LOOKUPS; i++) deps[`pkg-${i}`] = '1.0.0';
     expect(detectAndParse(JSON.stringify({ dependencies: deps })).dependencies).toHaveLength(
-      MAX_DEPENDENCIES,
+      MAX_LOOKUPS,
     );
+  });
+
+  it('ロックファイルは照会不要なので上限に掛からない', () => {
+    // 費用がかかるのは外部照会であって依存の総数ではない
+    const packages: Record<string, unknown> = {};
+    for (let i = 0; i < MAX_LOOKUPS * 5; i++) {
+      packages[`node_modules/pkg-${i}`] = { version: '1.0.0', license: 'MIT' };
+    }
+    const parsed = detectAndParse(JSON.stringify({ lockfileVersion: 3, packages }));
+    expect(parsed.dependencies).toHaveLength(MAX_LOOKUPS * 5);
   });
 
   it('/api/scan は上限超過を 400 で返す', async () => {
     const deps: Record<string, string> = {};
-    for (let i = 0; i <= MAX_DEPENDENCIES; i++) deps[`pkg-${i}`] = '1.0.0';
+    for (let i = 0; i <= MAX_LOOKUPS; i++) deps[`pkg-${i}`] = '1.0.0';
     const res = await app.request(
       '/api/scan',
       {

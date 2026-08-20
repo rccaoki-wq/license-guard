@@ -27,7 +27,14 @@ type Env = {
 
 const app = new Hono<Env>();
 
-const MAX_CONTENT_BYTES = 100_000;
+/**
+ * 本文サイズの上限。
+ *
+ * 実在するプロジェクトの package-lock.json は数百KB から数MB になる
+ * （本プロジェクト自身でも 162KB）。JSON のパースは安価で、費用がかかる
+ * のは外部照会の方なので、そちらを MAX_LOOKUPS で抑える。
+ */
+const MAX_CONTENT_BYTES = 4_000_000;
 
 const DISTRIBUTION_MODELS: readonly DistributionModel[] = [
   'saas',
@@ -317,7 +324,7 @@ app.post('/api/scan', async (c) => {
   // D1 の 1 ステートメント上限と処理時間の両方を考慮した入力上限。
   // UTF-8 バイト数で計測する（String.length は UTF-16 単位のため過小評価となる）
   if (new TextEncoder().encode(content).length > MAX_CONTENT_BYTES) {
-    return c.json({ error: 'Input is too large (100KB limit).' }, 413);
+    return c.json({ error: 'Input is too large (4MB limit).' }, 413);
   }
 
   if (!DISTRIBUTION_MODELS.includes(distributionModel as DistributionModel)) {

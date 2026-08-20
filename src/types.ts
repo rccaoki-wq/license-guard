@@ -38,6 +38,11 @@ export interface Dependency {
   /** 具体的なバージョン。範囲指定などで確定できない場合は null */
   version: string | null;
   scope: Scope;
+  /**
+   * ロックファイルに記録されていたライセンス。
+   * 存在する場合は上流への照会が不要で、かつ実際に導入される版の情報。
+   */
+  declaredLicense?: string;
 }
 
 export interface PolicyContext {
@@ -59,6 +64,8 @@ export interface PolicyResult {
  * （または未公開だった）ため最新リリースから採ったことを表す。
  */
 export type ResolvedFrom =
+  /** ロックファイルに記録されていた値。実際に導入される版の情報で最も確か */
+  | 'lockfile'
   | 'registry'
   | 'registry-latest'
   | 'clearlydefined'

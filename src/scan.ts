@@ -61,10 +61,18 @@ function summarize(findings: Finding[]): ScanSummary {
 }
 
 function limitationsFor(ecosystem: Ecosystem, findings: Finding[]): string[] {
-  const out = [
-    'Only direct dependencies were checked. Transitive dependencies are not included.',
-    'Results are based on license metadata declared in the manifest. Code copied into your own source files is not detected.',
-  ];
+  // ロックファイルなら推移的依存まで見えている。同じ但し書きを出すと嘘になる
+  const fromLockfile = findings.some((f) => f.resolvedFrom === 'lockfile');
+
+  const out = fromLockfile
+    ? [
+        'Transitive dependencies are included, read from the lockfile with the exact versions that will be installed.',
+        'Results are based on license metadata recorded in the lockfile. Code copied into your own source files is not detected.',
+      ]
+    : [
+        'Only direct dependencies were checked. Transitive dependencies are not included — send a package-lock.json to cover those.',
+        'Results are based on license metadata declared in the manifest. Code copied into your own source files is not detected.',
+      ];
 
   if (ecosystem === 'go') {
     out.push('Go modules were evaluated assuming static linking.');
