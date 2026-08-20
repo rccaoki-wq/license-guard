@@ -57,7 +57,13 @@ npm install
 npm test          # 全テスト
 npm run typecheck
 npm run smoke     # 実レジストリへの疎通確認
-npm run e2e       # 本番に対する E2E（ブラウザ / MCPクライアント / 負荷）
+npm run e2e       # 本番に対する E2E 6種
+                  #   ui          Playwright で実ブラウザ
+                  #   mcp         公式 MCP SDK クライアント
+                  #   load        並列実行時の一貫性
+                  #   adversarial 敵対的入力・境界値
+                  #   correctness 既知の正解との突き合わせ
+                  #   operational 経路間の一致・HTTP・キャッシュ
 npm run dev       # http://localhost:8787
 ```
 
