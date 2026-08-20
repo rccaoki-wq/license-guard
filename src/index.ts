@@ -7,7 +7,12 @@ import { LicenseCache } from './resolver/cache';
 import { LicenseResolver } from './resolver';
 import { findLicense } from './seo/catalog';
 import { buildRobotsTxt, buildSitemap, type SitemapPackage } from './seo/sitemap';
-import type { DistributionModel, Ecosystem } from './types';
+import { buildLlmsTxt } from './seo/llms';
+import { handleMcpRequest } from './mcp/handler';
+import { evaluateExpression } from './policy/engine';
+import { packagePath } from './ui/pkg';
+import { SITE_ORIGIN } from './ui/layout';
+import type { DistributionModel, Ecosystem, Linkage, Scope } from './types';
 
 type Env = { Bindings: { DB: D1Database } };
 
@@ -35,6 +40,9 @@ const TRACKED_EVENTS = new Set([
 /** SEO ページはエッジで長めにキャッシュする */
 const SEO_CACHE = 'public, max-age=3600, s-maxage=86400';
 
+const DISCLAIMER =
+  'Informational only, not legal advice. Based on declared license metadata; copied code fragments are not detected.';
+
 app.get('/', (c) => c.html(renderPage(), 200, { 'cache-control': 'public, max-age=300' }));
 
 app.get('/healthz', (c) => c.json({ ok: true }));
@@ -42,6 +50,102 @@ app.get('/healthz', (c) => c.json({ ok: true }));
 app.get('/robots.txt', (c) =>
   c.text(buildRobotsTxt(), 200, { 'cache-control': SEO_CACHE }),
 );
+
+app.get('/llms.txt', (c) =>
+  c.text(buildLlmsTxt(), 200, { 'cache-control': SEO_CACHE }),
+);
+
+// --- MCP: ステートレス Streamable HTTP エンドポイント ---
+
+app.all('/mcp', (c) =>
+  handleMcpRequest(c.req.raw, { cache: new LicenseCache(c.env.DB) }),
+);
+
+// --- 機械可読 API ---
+
+const SCOPES: readonly Scope[] = ['runtime', 'dev', 'build', 'test', 'optional'];
+const API_LINKAGE: Record<Ecosystem, Linkage> = {
+  npm: 'dynamic',
+  pypi: 'dynamic',
+  go: 'static',
+};
+
+async function packageApi(
+  c: Context<Env>,
+  ecosystem: Ecosystem,
+  name: string,
+): Promise<Response> {
+  const model = (c.req.query('model') ?? 'saas') as DistributionModel;
+  const scope = (c.req.query('scope') ?? 'runtime') as Scope;
+  const version = c.req.query('version') ?? null;
+
+  if (!DISTRIBUTION_MODELS.includes(model)) {
+    return c.json({ error: `model must be one of: ${DISTRIBUTION_MODELS.join(', ')}` }, 400);
+  }
+  if (!SCOPES.includes(scope)) {
+    return c.json({ error: `scope must be one of: ${SCOPES.join(', ')}` }, 400);
+  }
+  if (name === '' || name.length > 214) {
+    return c.json({ error: 'name is required.' }, 400);
+  }
+
+  const resolver = new LicenseResolver(new LicenseCache(c.env.DB));
+  const { spdx, resolvedFrom } = await resolver.resolve({ ecosystem, name, version, scope });
+  const reference = SITE_ORIGIN + packagePath(ecosystem, name);
+
+  if (resolvedFrom === 'unresolved') {
+    return c.json(
+      {
+        package: { ecosystem, name, version },
+        license: null,
+        licenseSource: resolvedFrom,
+        distributionModel: model,
+        scope,
+        verdict: 'review',
+        obligations: [],
+        rationale:
+          'The license could not be determined. Either none is declared, or the registry did not return one. A package genuinely published without a license is all rights reserved by default.',
+        reference,
+        disclaimer: DISCLAIMER,
+      },
+      200,
+      { 'cache-control': 'public, max-age=300' },
+    );
+  }
+
+  const r = evaluateExpression(spdx, {
+    scope,
+    linkage: API_LINKAGE[ecosystem],
+    distributionModel: model,
+  });
+
+  return c.json(
+    {
+      package: { ecosystem, name, version },
+      license: spdx,
+      licenseSource: resolvedFrom,
+      distributionModel: model,
+      scope,
+      verdict: r.verdict,
+      obligations: r.obligations,
+      rationale: r.rationale,
+      reference,
+      disclaimer: DISCLAIMER,
+    },
+    200,
+    { 'cache-control': SEO_CACHE },
+  );
+}
+
+app.get('/api/pkg/go/*', (c) =>
+  packageApi(c, 'go', decodeURIComponent(c.req.path.slice('/api/pkg/go/'.length))),
+);
+
+app.get('/api/pkg/:ecosystem/:name', (c) => {
+  const ecosystem = c.req.param('ecosystem') as Ecosystem;
+  if (!ECOSYSTEMS.includes(ecosystem)) return c.notFound();
+  return packageApi(c, ecosystem, c.req.param('name'));
+});
 
 app.get('/licenses', (c) =>
   c.html(renderLicenseIndex(), 200, { 'cache-control': SEO_CACHE }),

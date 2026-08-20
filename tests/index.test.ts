@@ -190,3 +190,77 @@ describe('SEO ルート', () => {
     expect((await app.request('/pkg/maven/foo', {}, env)).status).toBe(404);
   });
 });
+
+describe('エージェント向けルート', () => {
+  it('GET /llms.txt は MCP と API を先頭に案内する', async () => {
+    const { env } = fakeEnv();
+    const res = await app.request('/llms.txt', {}, env);
+    expect(res.status).toBe(200);
+    const txt = await res.text();
+    expect(txt).toContain('## For agents');
+    expect(txt).toContain('claude mcp add licenseguard');
+    expect(txt).toContain('/api/pkg/');
+    expect(txt).toContain('not legal advice');
+    // AGPL と GPL の違いという最も混同されやすい事実を明示する
+    expect(txt).toContain('section 13');
+  });
+
+  it('POST /mcp は initialize に応答する', async () => {
+    const { env } = fakeEnv();
+    const res = await app.request(
+      '/mcp',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: '2025-06-18' },
+        }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.result.serverInfo.name).toBe('licenseguard');
+  });
+
+  it('GET /mcp は 405（SSE非提供）', async () => {
+    const { env } = fakeEnv();
+    expect((await app.request('/mcp', {}, env)).status).toBe(405);
+  });
+
+  it('POST /mcp は tools/list を返す', async () => {
+    const { env } = fakeEnv();
+    const res = await app.request(
+      '/mcp',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }),
+      },
+      env,
+    );
+    const json = (await res.json()) as any;
+    expect(json.result.tools).toHaveLength(3);
+  });
+
+  it('GET /api/pkg は不正な model を 400 にする', async () => {
+    const { env } = fakeEnv();
+    const res = await app.request('/api/pkg/npm/express?model=nonsense', {}, env);
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /api/pkg は未知エコシステムを 404 にする', async () => {
+    const { env } = fakeEnv();
+    expect((await app.request('/api/pkg/maven/foo', {}, env)).status).toBe(404);
+  });
+
+  it('robots.txt が API を除外していても llms.txt は許可される', async () => {
+    const { env } = fakeEnv();
+    const txt = await (await app.request('/robots.txt', {}, env)).text();
+    expect(txt).toContain('Disallow: /api/');
+    expect(txt).not.toContain('Disallow: /llms.txt');
+  });
+});

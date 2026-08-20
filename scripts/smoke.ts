@@ -10,6 +10,8 @@ const cases: Array<[string, Promise<string | null>, string]> = [
   ['pypi requests@2.31.0', fetchPypiLicense('requests', '2.31.0'), 'Apache-2.0'],
   ['pypi flask', fetchPypiLicense('flask', null), 'BSD-3-Clause'],
   ['go gin@v1.9.1', fetchGoLicense('github.com/gin-gonic/gin', 'v1.9.1'), 'MIT'],
+  ['go gin (no version)', fetchGoLicense('github.com/gin-gonic/gin', null), 'MIT'],
+  ['go cobra (no version)', fetchGoLicense('github.com/spf13/cobra', null), 'Apache-2.0'],
 ];
 
 let failed = 0;

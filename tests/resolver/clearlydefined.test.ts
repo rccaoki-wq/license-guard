@@ -34,12 +34,29 @@ describe('fetchGoLicense', () => {
     expect(await fetchGoLicense('github.com/a/b', 'v1.0.0', f)).toBeNull();
   });
 
-  it('version が null なら null を返す（座標が定まらないため）', async () => {
-    const f = mockFetch({ licensed: { declared: 'MIT' } });
-    expect(await fetchGoLicense('github.com/a/b', null, f)).toBeNull();
-  });
-
   it('HTTP エラーなら null を返す', async () => {
     expect(await fetchGoLicense('github.com/a/b', 'v1.0.0', mockFetch({}, false))).toBeNull();
+  });
+});
+
+describe('fetchGoLicense — バージョン未指定', () => {
+  it('version が null なら最新版を解決してから問い合わせる', async () => {
+    const calls: string[] = [];
+    const f = vi.fn(async (url: string) => {
+      calls.push(url);
+      if (url.includes('proxy.golang.org')) {
+        return { ok: true, json: async () => ({ Version: 'v1.12.0' }) };
+      }
+      return { ok: true, json: async () => ({ licensed: { declared: 'MIT' } }) };
+    }) as unknown as typeof fetch;
+
+    expect(await fetchGoLicense('github.com/gin-gonic/gin', null, f)).toBe('MIT');
+    expect(calls[0]).toContain('proxy.golang.org');
+    expect(calls[1]).toContain('v1.12.0');
+  });
+
+  it('最新版も引けなければ null', async () => {
+    const f = vi.fn(async () => ({ ok: false, json: async () => ({}) })) as unknown as typeof fetch;
+    expect(await fetchGoLicense('github.com/a/b', null, f)).toBeNull();
   });
 });

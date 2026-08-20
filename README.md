@@ -19,9 +19,34 @@
 
 最後の行が決定的。既存ツールの多くは dev と runtime を区別せず警告を出し、オオカミ少年化して無視される。
 
+## エージェントから使う
+
+この製品が必要になるのは、ブラウザで検索している時ではなく**依存を追加している時**です。だから第一の配置は検索結果ではなく、エージェントのツールです。
+
+```bash
+claude mcp add licenseguard --transport http https://license-guard.rcc-aoki.workers.dev/mcp
+```
+
+ステートレスな Streamable HTTP、認証不要。提供するツール:
+
+| ツール | 用途 |
+|---|---|
+| `check_dependency_license` | 依存を1つ追加する前に呼ぶ |
+| `check_manifest_licenses` | マニフェスト全体を監査する |
+| `explain_license` | ライセンス自体が何を要求するかを全配布モデルで説明する |
+
+JSON API も同じ判定を返します。
+
+```bash
+curl "https://license-guard.rcc-aoki.workers.dev/api/pkg/pypi/pyload-ng?model=saas"
+# => {"license":"AGPL-3.0-only","verdict":"blocked", ...}
+```
+
+エージェント向けの入口は [`/llms.txt`](https://license-guard.rcc-aoki.workers.dev/llms.txt) にまとめてあります。
+
 ## 現在のフェーズ
 
-**Phase 0（支払意思の検証）** — 無料 Web ツールを公開し、有料レポート CTA のクリック率を実測する。GitHub App（Phase 1）は検証結果を見てから着手する。
+**Phase 0（支払意思の検証）** — MCP サーバーと無料 Web ツールを公開済み。主戦場は検索ではなくエージェントの workflow なので、検証指標は CTA クリック率ではなく **MCP の導入数と継続呼び出し数**。GitHub App（Phase 1）は検証結果を見てから着手する。
 
 対応: npm / PyPI / Go modules の**直接依存のみ**。推移的依存は Phase 1。
 
@@ -29,7 +54,7 @@
 
 ```bash
 npm install
-npm test          # 115 tests
+npm test          # 201 tests
 npm run typecheck
 npm run smoke     # 実レジストリへの疎通確認
 npm run dev       # http://localhost:8787
