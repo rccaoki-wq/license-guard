@@ -73,6 +73,36 @@ curl -s -o /dev/null -w '%{http_code}\n' \
   https://glama.ai/mcp/servers/rccaoki-wq/license-guard/badges/score.svg
 ```
 
+ただし**200 は採点済みを意味しない**。ビルドを作る前の段階でも 200 を返し、
+中身は quality が未採点（グレーの `-`）のバッジになる。貼る前にサーバーページの
+scorecard で quality に等級が入っていることを目視すること。
+
+#### quality score には Glama 上の release が要る
+
+license / maintenance は GitHub のメタデータだけで付くが、**quality は
+Dockerfile からイメージを作って実際に起動し、ツール定義を読んで採点する**。
+そのため `Claim` → `build spec` 入力 → `Build` → `Make Release` まで
+進めないと `quality - not tested` のままになる。これがローカル stdio 版
+（`src/local/stdio.ts`）を用意した直接の動機。
+
+#### build spec の書式と落とし穴
+
+- **Build steps は JSON 配列**。`["npm ci", "npm run build:stdio"]`。
+  改行区切りのプレーンテキストで書くと `Invalid JSON` になる
+- **CMD には Glama が `mcp-proxy` を自動で前置する**
+  （`["mcp-proxy","--","node","dist/stdio.mjs"]`）。stdio を SSE に変換するため。触らない
+- **Glama が持つリポジトリの HEAD は古いことがある。** 生成される Dockerfile の
+  `git checkout <sha>` が最新コミットでないと、新しく追加した npm script が
+  `Missing script` で落ちる。`Pinned commit SHA` 欄も反映されないことがあった
+- **確実な回避策は build steps の先頭で自分でチェックアウトし直すこと。**
+  `git clone` はフルクローンなので目的の SHA はコンテナ内に既にある
+
+```json
+["git checkout <full-sha>", "npm ci", "npm run build:stdio"]
+```
+
+  同期が済んだら 1 行目は消してよい。デフォルトブランチは `master`（`main` ではない）
+
 ### awesome-mcp-servers に出すときの注意
 
 - **自動エージェントは PR タイトル末尾に `🤖🤖🤖` を付ける**規約がある（CONTRIBUTING.md）。付けると早期マージの対象になる。隠さず使うこと
