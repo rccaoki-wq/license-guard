@@ -19,7 +19,8 @@
     "e2e:correctness": "node e2e/round2-correctness.mjs",
     "e2e:operational": "node e2e/round3-operational.mjs",
     "e2e:a11y": "node e2e/a11y.spec.mjs",
-    "e2e:interest": "node e2e/interest.spec.mjs"
+    "e2e:interest": "node e2e/interest.spec.mjs",
+    "coverage": "vitest run --coverage.enabled --coverage.provider=v8 --coverage.reporter=text --coverage.include=src/**"
   },
   "dependencies": {
     "hono": "^4.6.0",
@@ -29,6 +30,7 @@
     "@cloudflare/workers-types": "^5.20260820.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/node": "^26.2.0",
+    "@vitest/coverage-v8": "^2.1.9",
     "playwright": "^1.62.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",

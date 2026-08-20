@@ -14,7 +14,8 @@ interface LockEntry {
 
 interface LockFile {
   lockfileVersion?: number;
-  packages?: Record<string, LockEntry>;
+  /** 値は外部入力なので unknown として受け、使う直前に検証する */
+  packages?: Record<string, unknown>;
 }
 
 /** package-lock.json のキーから実際のパッケージ名を取り出す */
@@ -27,6 +28,7 @@ export function nameFromLockKey(key: string): string | null {
 }
 
 function declaredLicense(entry: LockEntry): string | undefined {
+  // licenses が配列でない、license が数値、といった形も来うる
   if (typeof entry.license === 'string' && entry.license.trim() !== '') {
     return entry.license.trim();
   }
@@ -64,15 +66,23 @@ function scopeOf(entry: LockEntry): Scope {
  * ライセンス情報が無く、結局すべて照会が必要になる）。
  */
 export function parsePackageLock(content: string): Dependency[] {
-  const doc = JSON.parse(content) as LockFile;
-  const packages = doc.packages;
-  if (!packages) return [];
+  const parsed: unknown = JSON.parse(content);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return [];
+
+  const packages = (parsed as LockFile).packages;
+  if (typeof packages !== 'object' || packages === null || Array.isArray(packages)) return [];
 
   const out: Dependency[] = [];
 
-  for (const [key, entry] of Object.entries(packages)) {
+  for (const [key, raw] of Object.entries(packages)) {
     // ルートプロジェクト自身
     if (key === '') continue;
+
+    // 外部から貼り付けられる入力なので、型を信用しない。
+    // null や文字列が来ても落ちてはならない（JSON.parse は通ってしまう）
+    if (typeof raw !== 'object' || raw === null) continue;
+    const entry = raw as LockEntry;
+
     // ワークスペースへのリンクは公開パッケージではない
     if (entry.link) continue;
 
@@ -82,7 +92,9 @@ export function parsePackageLock(content: string): Dependency[] {
     out.push({
       ecosystem: 'npm',
       name,
-      version: entry.version ?? null,
+      // version は文字列であることを確かめる。数値やオブジェクトが
+      // 入っていると、以降の URL 組み立てやキャッシュキーが壊れる
+      version: typeof entry.version === 'string' && entry.version !== '' ? entry.version : null,
       scope: scopeOf(entry),
       declaredLicense: declaredLicense(entry),
     });
