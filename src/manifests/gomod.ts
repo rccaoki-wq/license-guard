@@ -1,3 +1,4 @@
+import { isSafePackageName } from './name-safety';
 import type { Dependency } from '../types';
 
 const MODULE_LINE = /^([A-Za-z0-9._~/-]+\.[A-Za-z0-9._~/-]+)\s+(v[^\s]+)$/;
@@ -28,7 +29,7 @@ export function parseGoMod(content: string): Dependency[] {
     const single = /^require\s+(.+)$/.exec(line);
     if (single && single[1]) {
       const m = MODULE_LINE.exec(single[1].trim());
-      if (m && m[1] && m[2]) {
+      if (m && m[1] && m[2] && isSafePackageName(m[1])) {
         out.push({ ecosystem: 'go', name: m[1], version: m[2], scope: 'runtime' });
       }
       continue;
@@ -37,7 +38,7 @@ export function parseGoMod(content: string): Dependency[] {
     if (block !== 'require') continue;
 
     const m = MODULE_LINE.exec(line);
-    if (m && m[1] && m[2]) {
+    if (m && m[1] && m[2] && isSafePackageName(m[1])) {
       out.push({ ecosystem: 'go', name: m[1], version: m[2], scope: 'runtime' });
     }
   }

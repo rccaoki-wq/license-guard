@@ -1,3 +1,4 @@
+import { isSafePackageName } from './name-safety';
 import type { Dependency, Scope } from '../types';
 
 const SEMVER = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
@@ -28,6 +29,8 @@ export function parsePackageJson(content: string): Dependency[] {
 
     for (const [name, range] of Object.entries(section as Record<string, unknown>)) {
       if (typeof range !== 'string') continue;
+      // 表示偽装や空名を持ち込ませない
+      if (!isSafePackageName(name)) continue;
       out.push({
         ecosystem: 'npm',
         name,

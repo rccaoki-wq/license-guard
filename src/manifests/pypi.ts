@@ -1,3 +1,4 @@
+import { isSafePackageName } from './name-safety';
 import type { Dependency } from '../types';
 
 const NAME_AND_PIN = /^([A-Za-z0-9._-]+)\s*(?:\[[^\]]*\])?\s*(?:(==)\s*([^\s]+))?/;
@@ -21,6 +22,13 @@ export function parseRequirementsTxt(content: string): Dependency[] {
 
     const m = NAME_AND_PIN.exec(line);
     if (!m || !m[1]) continue;
+    if (!isSafePackageName(m[1])) continue;
+
+    // 名前の正規表現は ASCII しか拾わないため、不可視文字を挟まれると
+    // "bad<ZWSP>pkg" が "bad" として通ってしまう。黙って別のパッケージに
+    // すり替わるのは取り違えの元なので、名前の直後が正当な区切りかを確かめる。
+    const next = line[m[1].length];
+    if (next !== undefined && !/[[=<>!~;\s,@]/.test(next)) continue;
 
     out.push({
       ecosystem: 'pypi',
