@@ -43,9 +43,14 @@ describe('MCP 計測', () => {
       }),
       ctx,
     );
-    expect(events).toEqual([
-      { event: 'initialize', clientName: 'claude-code', clientVersion: '2.0' },
-    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      event: 'initialize',
+      clientName: 'claude-code',
+      clientVersion: '2.0',
+    });
+    // 発行したセッション ID が記録側にも載る（これが無いと tool_call と結合できない）
+    expect(events[0]!.sessionId).toMatch(/^[\x21-\x7e]+$/);
   });
 
   it('tool_call でツール・エコシステム・配布モデル・判定を記録する', async () => {

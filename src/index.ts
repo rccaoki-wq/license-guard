@@ -9,7 +9,7 @@ import { findLicense } from './seo/catalog';
 import { buildRobotsTxt, buildSitemap, type SitemapPackage } from './seo/sitemap';
 import { buildLlmsTxt } from './seo/llms';
 import { handleMcpRequest } from './mcp/handler';
-import { createD1Recorder } from './mcp/telemetry';
+import { createD1Recorder, isSyntheticRequest } from './mcp/telemetry';
 import { enforceRateLimit, type RateLimitBinding } from './ratelimit';
 import { isPlausibleEmail, normalizeEmail } from './interest';
 import { evaluateExpression } from './policy/engine';
@@ -374,12 +374,14 @@ app.post('/api/interest', async (c) => {
 
   try {
     await c.env.DB.prepare(
-      `INSERT INTO interest_signals (email, verdict_mix, distribution_model, note, created_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO interest_signals
+         (email, verdict_mix, distribution_model, note, synthetic, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (email) DO UPDATE SET
          verdict_mix = excluded.verdict_mix,
          distribution_model = excluded.distribution_model,
          note = COALESCE(excluded.note, interest_signals.note),
+         synthetic = excluded.synthetic,
          created_at = excluded.created_at`,
     )
       .bind(
@@ -387,6 +389,7 @@ app.post('/api/interest', async (c) => {
         str(body.verdictMix, 64),
         str(body.distributionModel, 32),
         str(body.note, 500),
+        isSyntheticRequest(c.req.raw.headers) ? 1 : 0,
         Date.now(),
       )
       .run();
@@ -406,9 +409,15 @@ app.post('/api/track', async (c) => {
 
     if (typeof name === 'string' && TRACKED_EVENTS.has(name) && typeof sessionId === 'string') {
       await c.env.DB.prepare(
-        'INSERT INTO events (name, session_id, payload, created_at) VALUES (?, ?, ?, ?)',
+        'INSERT INTO events (name, session_id, payload, synthetic, created_at) VALUES (?, ?, ?, ?, ?)',
       )
-        .bind(name, sessionId.slice(0, 64), null, Date.now())
+        .bind(
+          name,
+          sessionId.slice(0, 64),
+          null,
+          isSyntheticRequest(c.req.raw.headers) ? 1 : 0,
+          Date.now(),
+        )
         .run();
     }
   } catch {

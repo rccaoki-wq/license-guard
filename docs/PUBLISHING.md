@@ -115,6 +115,27 @@ Dockerfile からイメージを作って実際に起動し、ツール定義を
 
 多くは公式レジストリの API を取り込むため、まず公式に載せるのが効率的です。
 
+## 掲載直後に来るのはクローラーであって利用者ではない
+
+公式レジストリに載せた当日、**30 種類以上の第三者クローラー・採点ボットが自力で
+発見して実際にツールを呼びに来た**。半日でこれだけ動くので、発見経路としての
+レジストリは確かに機能する。
+
+ただし**これを需要と読み違えないこと**。初日の mcp_events 981 件の内訳は、
+名前付きクライアント 33 種がすべて巡回・採点・カタログ収集で、残りは自分の E2E。
+実利用者はゼロだった。
+
+実際に来た名前（判別の参考）:
+
+```
+glimind-probe        proofbench-probe     verifymcp-probe    AgentIndexBot
+MCP-Marketplace-Scanner  mcpgrade         mcpqueen-grader    zerm-tool-census
+rootz-mcp-registry-prober  tiza-search-prober  agentage-mcp-catalog
+spanly-health-monitor  x402-observatory   glama-mcp-inspector  mcphub-probe
+```
+
+`npm run signals` がこれらを除外して集計する。判断は必ずそちらを見ること。
+
 ## 3. 掲載は信頼ではない
 
 2026 年の実質的な障壁は発見ではなく信頼です。レジストリ掲載はコードの安全性も

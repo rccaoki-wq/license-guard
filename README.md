@@ -112,7 +112,10 @@ npm run e2e        # end-to-end against production
                    #   operational  cross-path agreement, HTTP, caching
                    #   stdio        local and hosted paths must agree
 npm run dev        # http://localhost:8787
+npm run signals    # Phase 0 report: real usage only, test traffic excluded
 ```
+
+`npm run signals` is the one that decides what happens next, so it is deliberately conservative: traffic marked synthetic (every E2E suite sets `x-licenseguard-synthetic: 1`), traffic from registry crawlers and grading bots, and rows written before attribution existed are all excluded and reported separately rather than silently dropped. **Anything it cannot attribute, it refuses to count as demand.**
 
 Passing unit tests is not sufficient here. Several real defects only appeared once live registry data was involved, so `smoke` and `e2e` run against the real upstreams and must pass before a release.
 
@@ -143,7 +146,11 @@ Given the subject matter, every dependency is deliberately MIT or Apache-2.0. No
 
 ## Privacy
 
-The hosted service does not store manifest contents or package names. See [`src/mcp/telemetry.ts`](src/mcp/telemetry.ts) for exactly what is recorded. If that is not good enough for your organization, run the local stdio server — it sends nothing but package names and versions, and only to the public registries that already publish them.
+The hosted service does not store manifest contents, package names, or IP addresses. What it does record is the shape of usage: which tool was called, for which ecosystem and distribution model, what verdict came back, and an opaque session identifier so that repeat use can be counted at all. See [`src/mcp/telemetry.ts`](src/mcp/telemetry.ts) for the exact fields.
+
+The session identifier is issued as the spec's `Mcp-Session-Id` header. It is a random value with no meaning outside this database, it is never required, and it never expires — clients that ignore it keep working.
+
+If that is still more than your organization wants to share, run the local stdio server. It sends nothing but package names and versions, and only to the public registries that already publish them.
 
 ## Disclaimer
 

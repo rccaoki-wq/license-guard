@@ -1,5 +1,6 @@
 // 同時アクセス時の挙動。Worker のサブリクエスト上限と外部レジストリの
 // 挙動が絡むため、単発の成功では確認にならない。
+import { withSynthetic } from './synthetic.mjs';
 const BASE = process.env.BASE || 'https://license-guard.rcc-aoki.workers.dev';
 let failures = 0;
 const check = (n, ok, d = '') => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${n}${d ? ' — ' + d : ''}`); if (!ok) failures++; };
@@ -10,7 +11,7 @@ const check = (n, ok, d = '') => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${n}${d 
  */
 async function fetchWithBackoff(url, init, tries = 3) {
   for (let i = 0; i < tries; i++) {
-    const r = await fetch(url, init);
+    const r = await fetch(url, withSynthetic(init));
     if (r.status !== 429 || i === tries - 1) return r;
     await new Promise((res) => setTimeout(res, 20_000));
   }

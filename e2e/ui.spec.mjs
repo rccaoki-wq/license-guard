@@ -1,6 +1,7 @@
 // 無料Webツールをブラウザで実際に動かす。
 // これまで HTML を文字列として検査しただけで、JS が動くか未確認だった。
 import { chromium } from 'playwright';
+import { SYNTHETIC_HEADERS } from './synthetic.mjs';
 
 const BASE = process.env.BASE || 'https://license-guard.rcc-aoki.workers.dev';
 let failures = 0;
@@ -10,7 +11,7 @@ const check = (name, ok, detail = '') => {
 };
 
 const browser = await chromium.launch();
-const page = await browser.newPage();
+const page = await browser.newPage({ extraHTTPHeaders: SYNTHETIC_HEADERS });
 const consoleErrors = [];
 page.on('console', (m) => m.type() === 'error' && consoleErrors.push(m.text()));
 page.on('pageerror', (e) => consoleErrors.push('pageerror: ' + e.message));

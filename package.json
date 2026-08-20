@@ -22,7 +22,8 @@
     "e2e:interest": "node e2e/interest.spec.mjs",
     "coverage": "vitest run --coverage.enabled --coverage.provider=v8 --coverage.reporter=text --coverage.include=src/**",
     "build:stdio": "esbuild src/local/stdio.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/stdio.mjs",
-    "e2e:stdio": "node e2e/stdio.spec.mjs"
+    "e2e:stdio": "node e2e/stdio.spec.mjs",
+    "signals": "node scripts/signals.mjs"
   },
   "dependencies": {
     "hono": "^4.6.0",

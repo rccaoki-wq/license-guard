@@ -9,7 +9,7 @@ import {
   type JsonRpcRequest,
 } from './protocol';
 import { TOOL_DEFINITIONS, callTool, type ToolContext } from './tools';
-import type { Recorder } from './telemetry';
+import { isSyntheticRequest, sanitizeSessionId, type McpEvent, type Recorder } from './telemetry';
 import { SITE_ORIGIN } from '../ui/layout';
 
 export interface HandlerContext extends ToolContext {
@@ -60,6 +60,41 @@ export function isAllowedOrigin(origin: string | null | undefined): boolean {
 export function isSupportedProtocolHeader(value: string | null | undefined): boolean {
   if (!value) return true; // 仕様上、未指定は 2025-03-26 とみなす
   return (SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(value);
+}
+
+export const SESSION_HEADER = 'Mcp-Session-Id';
+
+/** バッチも単体も受け取るので、initialize が含まれるかを一様に見る */
+export function containsInitialize(payload: unknown): boolean {
+  const has = (m: unknown) =>
+    typeof m === 'object' && m !== null && (m as { method?: unknown }).method === 'initialize';
+  return Array.isArray(payload) ? payload.some(has) : has(payload);
+}
+
+/**
+ * このリクエストに紐づけるセッション ID を決める。
+ *
+ * クライアントが送ってきたものを最優先する（仕様上、発行後は送るのが MUST）。
+ * 無くて initialize なら新規発行する。それ以外は null のまま。
+ *
+ * **セッションを必須にはしない。** 仕様は必須にする場合に 400 を返すことを
+ * 認めているが、そうすると既存の非準拠クライアントが即座に壊れる。計測の
+ * ために可用性を落とすのは順序が逆。
+ */
+export function resolveSession(
+  request: Request,
+  payload: unknown,
+): { sessionId: string | null; issued: string | null } {
+  const incoming = sanitizeSessionId(request.headers.get('mcp-session-id'));
+  if (incoming) return { sessionId: incoming, issued: null };
+
+  if (containsInitialize(payload)) {
+    // 仕様: 暗号学的に安全で、0x21-0x7E の可視 ASCII のみ。UUID は条件を満たす
+    const issued = crypto.randomUUID();
+    return { sessionId: issued, issued };
+  }
+
+  return { sessionId: null, issued: null };
 }
 
 async function dispatch(
@@ -159,10 +194,16 @@ async function dispatch(
 }
 
 /**
- * ステートレスな Streamable HTTP エンドポイント。
+ * Streamable HTTP エンドポイント。
  *
- * セッション ID を発行しないため、クライアントは以降のリクエストで
- * Mcp-Session-Id を送らない。SSE ストリームも提供しないため GET は 405 を返す。
+ * サーバー側に会話状態は持たない。initialize でセッション ID を発行するのは
+ * **計測の帰属のため**であって、状態を持つためではない。したがって:
+ *
+ * - セッション ID を要求しない（無くても通す）
+ * - セッションを終了させないので 404 を返すことがない
+ * - どのリクエストも単体で完結する
+ *
+ * SSE ストリームは提供しないため GET は 405 を返す。
  */
 export async function handleMcpRequest(
   request: Request,
@@ -184,9 +225,11 @@ export async function handleMcpRequest(
     });
   }
 
-  // 仕様: セッション終了を許さないサーバーは DELETE に 405 を返してよい
+  // 仕様: セッション終了を許さないサーバーは DELETE に 405 を返してよい。
+  // 発行するセッション ID は計測の目印でありサーバー側の状態ではないので、
+  // 終了させる対象が無い。
   if (request.method === 'DELETE') {
-    return new Response('This server is stateless and has no sessions to terminate.', {
+    return new Response('Sessions here are telemetry labels, not server state; nothing to terminate.', {
       status: 405,
       headers: { allow: 'POST' },
     });
@@ -206,6 +249,26 @@ export async function handleMcpRequest(
     );
   }
 
+  // このリクエストの帰属情報を決め、記録側に自動で載せる。
+  // dispatch 側は帰属を意識しない（記録漏れを構造的に防ぐ）。
+  const { sessionId, issued } = resolveSession(request, payload);
+  const synthetic = isSyntheticRequest(request.headers);
+
+  const reqCtx: HandlerContext = ctx.record
+    ? {
+        ...ctx,
+        record: (e: McpEvent) =>
+          ctx.record!({
+            ...e,
+            ...(sessionId ? { sessionId } : {}),
+            ...(synthetic ? { synthetic: true } : {}),
+          }),
+      }
+    : ctx;
+
+  // 仕様: 発行したセッション ID は InitializeResult の応答ヘッダで返す
+  const headers = issued ? { ...JSON_HEADERS, [SESSION_HEADER]: issued } : JSON_HEADERS;
+
   // バッチ（配列）にも応答する
   if (Array.isArray(payload)) {
     const valid = payload.filter(isValidMessage);
@@ -216,13 +279,18 @@ export async function handleMcpRequest(
       );
     }
 
-    const responses = (await Promise.all(valid.map((m) => dispatch(m, ctx)))).filter(
+    const responses = (await Promise.all(valid.map((m) => dispatch(m, reqCtx)))).filter(
       (r): r is Record<string, unknown> => r !== null,
     );
 
     // すべて通知だった場合は本文なしの 202
-    if (responses.length === 0) return new Response(null, { status: 202 });
-    return Response.json(responses, { headers: JSON_HEADERS });
+    if (responses.length === 0) {
+      return new Response(null, {
+        status: 202,
+        ...(issued ? { headers: { [SESSION_HEADER]: issued } } : {}),
+      });
+    }
+    return Response.json(responses, { headers });
   }
 
   if (!isValidMessage(payload)) {
@@ -232,10 +300,15 @@ export async function handleMcpRequest(
     );
   }
 
-  const response = await dispatch(payload, ctx);
+  const response = await dispatch(payload, reqCtx);
 
   // 仕様: 通知・レスポンスを受け取った場合は本文なしの 202 Accepted
-  if (response === null) return new Response(null, { status: 202 });
+  if (response === null) {
+    return new Response(null, {
+      status: 202,
+      ...(issued ? { headers: { [SESSION_HEADER]: issued } } : {}),
+    });
+  }
 
-  return Response.json(response, { headers: JSON_HEADERS });
+  return Response.json(response, { headers });
 }

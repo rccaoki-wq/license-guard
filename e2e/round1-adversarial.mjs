@@ -1,4 +1,5 @@
 // Round 1: 敵対的入力・境界値・プロトタイプ汚染・SPDX式の極端系
+import { withSynthetic } from './synthetic.mjs';
 const B = process.env.BASE || 'https://license-guard.rcc-aoki.workers.dev';
 let fail = 0;
 const check = (n, ok, d = '') => {
@@ -12,7 +13,7 @@ const check = (n, ok, d = '') => {
  */
 async function fetchWithBackoff(url, init, tries = 3) {
   for (let i = 0; i < tries; i++) {
-    const r = await fetch(url, init);
+    const r = await fetch(url, withSynthetic(init));
     if (r.status !== 429 || i === tries - 1) return r;
     await new Promise((res) => setTimeout(res, 20_000));
   }

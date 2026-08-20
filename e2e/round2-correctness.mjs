@@ -1,5 +1,6 @@
 // Round 2: 判定の正しさを、既知の正解を持つ実パッケージで検証する。
 // 「落ちないこと」ではなく「答えが合っていること」を見る。
+import { withSynthetic } from './synthetic.mjs';
 const B = process.env.BASE || 'https://license-guard.rcc-aoki.workers.dev';
 let fail = 0;
 const check = (n, ok, d = '') => {
@@ -13,7 +14,7 @@ const check = (n, ok, d = '') => {
  */
 async function fetchWithBackoff(url, init, tries = 3) {
   for (let i = 0; i < tries; i++) {
-    const r = await fetch(url, init);
+    const r = await fetch(url, withSynthetic(init));
     if (r.status !== 429 || i === tries - 1) return r;
     await new Promise((res) => setTimeout(res, 20_000));
   }

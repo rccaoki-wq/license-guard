@@ -2,13 +2,16 @@
 // これまで curl で JSON-RPC を手打ちしただけで、実クライアントは未検証だった。
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SYNTHETIC_HEADERS } from './synthetic.mjs';
 
 const URL_ = process.env.MCP_URL || 'https://license-guard.rcc-aoki.workers.dev/mcp';
 let failures = 0;
 const check = (n, ok, d = '') => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${n}${d ? ' — ' + d : ''}`); if (!ok) failures++; };
 
 const client = new Client({ name: 'licenseguard-e2e', version: '1.0.0' }, { capabilities: {} });
-const transport = new StreamableHTTPClientTransport(new URL(URL_));
+const transport = new StreamableHTTPClientTransport(new URL(URL_), {
+  requestInit: { headers: SYNTHETIC_HEADERS },
+});
 
 await client.connect(transport);
 check('公式SDKクライアントで接続できる', true);

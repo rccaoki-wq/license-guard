@@ -117,8 +117,22 @@ describe('initialize', () => {
     expect(json.result.instructions).toContain('distribution model');
   });
 
-  it('セッションIDヘッダを発行しない（ステートレス）', async () => {
+  it('セッションIDを発行する（計測の帰属のため）', async () => {
     const { res } = await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+    const sid = res.headers.get('mcp-session-id');
+    expect(sid).toBeTruthy();
+    // 仕様: 可視 ASCII (0x21-0x7E) のみ
+    expect(sid!).toMatch(/^[\x21-\x7e]+$/);
+  });
+
+  it('毎回異なるセッションIDを発行する', async () => {
+    const a = (await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })).res;
+    const b = (await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })).res;
+    expect(a.headers.get('mcp-session-id')).not.toBe(b.headers.get('mcp-session-id'));
+  });
+
+  it('initialize 以外では発行しない', async () => {
+    const { res } = await rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
     expect(res.headers.get('mcp-session-id')).toBeNull();
   });
 });
