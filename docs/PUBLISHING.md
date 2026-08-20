@@ -69,8 +69,8 @@ curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guar
 404 のバッジを貼ると壊れて見えるので、200 を確認してから貼ること。
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}
-"   https://glama.ai/mcp/servers/rccaoki-wq/license-guard/badges/score.svg
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://glama.ai/mcp/servers/rccaoki-wq/license-guard/badges/score.svg
 ```
 
 ### awesome-mcp-servers に出すときの注意
