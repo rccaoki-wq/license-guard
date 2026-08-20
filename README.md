@@ -1,133 +1,154 @@
 # LicenseGuard
 
-依存 OSS のライセンスが、あなたの**配布モデル**に対して法的義務を発生させるかを判定するツール。
+*English | [日本語](README.ja.md)*
 
-本番: https://license-guard.rcc-aoki.workers.dev
+**Does this dependency's license create an obligation for the way *you* ship software?**
 
-## 何が違うのか
+Generic license scanners answer a different question — "what license is this?" — and then warn on everything. LicenseGuard evaluates the license against your distribution model, so the same license produces different verdicts depending on how the software reaches its users.
 
-既存のライセンスコンプライアンス製品は「判定が深いが商談必須（FOSSA / Black Duck）」か「セルフサーブだが判定が浅い（Snyk）」に二分され、その交差点に製品が存在しない。
+Live: **https://license-guard.rcc-aoki.workers.dev**
 
-差別化の中核は**判定層**にある。同じライセンスでも文脈で結論が真逆になる。
+## Why the distribution model decides it
 
-| 使い方 | AGPL-3.0 の帰結 |
+| How you ship | AGPL-3.0 dependency |
 |---|---|
-| SaaS として外部提供 | 開示義務あり |
-| 社内システムでのみ利用 | 義務なし |
-| 顧客に納品・配布 | 開示義務あり |
-| **devDependency**（成果物に含まれない） | **義務なし** |
+| SaaS (network-accessible) | **blocked** — §13 network clause |
+| Internal use only | allowed |
+| Distributed binary / on-prem | **blocked** — inherited GPL distribution terms |
+| **devDependency** (never in the artifact) | **allowed** |
 
-最後の行が決定的。既存ツールの多くは dev と runtime を区別せず警告を出し、オオカミ少年化して無視される。
+That last row is the whole point. A build-time linter under AGPL never ships, so it triggers nothing — but tools that warn on it anyway train people to ignore every warning they produce.
 
-## エージェントから使う
+The same split runs through the rest of the license landscape, and the distinctions are not interchangeable:
 
-この製品が必要になるのは、ブラウザで検索している時ではなく**依存を追加している時**です。だから第一の配置は検索結果ではなく、エージェントのツールです。
+- **GPL** obligations attach to *distribution*. Running GPL code as a network service is not distribution.
+- **AGPL** adds §13, which attaches to *network interaction* — a separate trigger from GPL's distribution terms. Citing §13 for a distribution case is simply wrong, and LicenseGuard doesn't.
+- **MPL / EPL / CDDL** are file-scoped and **linkage-independent**. MPL-2.0 §3.3 explicitly permits distributing a Larger Work under your own terms. Applying LGPL's relinking logic to them produces false positives.
+- **LGPL** is the one that actually depends on linkage: static linking carries a relinking obligation, dynamic linking does not.
 
-ホスト版（すぐ使える）:
+Verdicts are stated as facts with the clause cited. LicenseGuard does not tell you what to do.
+
+## Use it from your coding agent
+
+You need this when you are **adding a dependency**, not when you are searching the web. So the primary surface is an MCP tool, not a search result.
+
+**Hosted** — nothing to install:
 
 ```bash
 claude mcp add licenseguard --transport http https://license-guard.rcc-aoki.workers.dev/mcp
 ```
 
-ローカル版（マニフェストを手元から出さない）:
+**Local (stdio)** — your manifest never leaves your machine. Only package names and versions are sent to public registries to look up licenses:
 
 ```bash
-claude mcp add licenseguard -- npx -y tsx /path/to/license-guard/src/local/stdio.ts
-# または Docker
-docker build -t licenseguard . && claude mcp add licenseguard -- docker run -i --rm licenseguard
+docker build -t licenseguard .
+claude mcp add licenseguard -- docker run -i --rm licenseguard
 ```
 
-**判定エンジンは両者で同一です。** 違うのは経路だけで、答えが食い違うことはありません
-（`npm run e2e:stdio` で固定しています）。
+Both paths run **the same policy engine**. They cannot disagree — an end-to-end suite (`npm run e2e:stdio`) pins them together.
 
-ローカル版は依存関係の一覧を外部に送りません。公開レジストリへ
-パッケージ名とバージョンを問い合わせるだけです。コンプライアンスを扱う道具に
-ロックファイルを渡したくない場合はこちらを使ってください。
+Stateless Streamable HTTP, no authentication, no session state.
 
-ステートレスな Streamable HTTP、認証不要。提供するツール:
-
-| ツール | 用途 |
+| Tool | When to call it |
 |---|---|
-| `check_dependency_license` | 依存を1つ追加する前に呼ぶ |
-| `check_manifest_licenses` | マニフェスト全体を監査する |
-| `explain_license` | ライセンス自体が何を要求するかを全配布モデルで説明する |
+| `check_dependency_license` | Before adding a single dependency |
+| `check_manifest_licenses` | To audit a whole manifest or lockfile |
+| `explain_license` | To see what a license requires across every distribution model |
 
-JSON API も同じ判定を返します。
+## Use it from anything else
+
+The JSON API returns the same verdicts:
 
 ```bash
 curl "https://license-guard.rcc-aoki.workers.dev/api/pkg/pypi/pyload-ng?model=saas"
 # => {"license":"AGPL-3.0-only","verdict":"blocked", ...}
 ```
 
-エージェント向けの入口は [`/llms.txt`](https://license-guard.rcc-aoki.workers.dev/llms.txt) にまとめてあります。
-
-## 現在のフェーズ
-
-**Phase 0（支払意思の検証）** — MCP サーバーと無料 Web ツールを公開済み。主戦場は検索ではなくエージェントの workflow なので、検証指標は CTA クリック率ではなく **MCP の導入数と継続呼び出し数**。GitHub App（Phase 1）は検証結果を見てから着手する。
-
-対応エコシステム: **npm / PyPI / Go modules / crates.io（Rust）**
-
-| 形式 | 推移的依存 | 外部照会 |
-|---|---|---|
-| `package-lock.json` | ○ | **不要**（ライセンスを内包） |
-| `pnpm-lock.yaml` / `yarn.lock` | ○ | 必要（共有キャッシュで逓減） |
-| `go.sum` | ○ | 必要 |
-| `Cargo.lock` / `poetry.lock` / `uv.lock` | ○ | 必要 |
-| `package.json` / `requirements.txt` / `go.mod` / `Cargo.toml` | ✗ 直接依存のみ | 必要 |
-
-**ロックファイルを渡すと推移的依存まで判定できます**（`package-lock.json` / `pnpm-lock.yaml` / `yarn.lock`）。
-このうち `package-lock.json` はライセンスを内包しているため外部照会が一切不要です。 ロックファイルは
-ライセンスを内包しているため外部照会が一切不要で、実際に導入される版の情報が
-そのまま使えます。問題のあるライセンスは直接追加した依存より、依存の依存として
-紛れ込むことの方が多いため、ここが実質的な本命です。
+Scan a whole lockfile:
 
 ```bash
-curl -X POST https://license-guard.rcc-aoki.workers.dev/api/scan   -H 'content-type: application/json'   -d "$(jq -Rs '{content: ., distributionModel: "saas"}' package-lock.json)"
+curl -X POST https://license-guard.rcc-aoki.workers.dev/api/scan \
+  -H 'content-type: application/json' \
+  -d "$(jq -Rs '{content: ., distributionModel: "saas"}' package-lock.json)"
 ```
 
-## 開発
+An agent-facing index lives at [`/llms.txt`](https://license-guard.rcc-aoki.workers.dev/llms.txt).
+
+## Supported manifests
+
+Ecosystems: **npm · PyPI · Go modules · crates.io**
+
+| Format | Transitive deps | Registry lookups |
+|---|---|---|
+| `package-lock.json` | yes | **none** — licenses are embedded |
+| `pnpm-lock.yaml`, `yarn.lock` | yes | yes (amortized by a shared cache) |
+| `go.sum` | yes | yes |
+| `Cargo.lock`, `poetry.lock`, `uv.lock` | yes | yes |
+| `package.json`, `requirements.txt`, `go.mod`, `Cargo.toml` | direct only | yes |
+
+Problem licenses usually arrive as a dependency of a dependency, not as something you added on purpose — so the lockfile path is the one that matters. `package-lock.json` v2/v3 embeds a license for every entry, which means a full transitive audit with **zero network lookups** and the exact versions that will actually be installed.
+
+**An incomplete scan is never reported as clean.** Dependencies that could not be resolved appear as `not-checked` or `review` and are counted in the summary. They never become `allowed`.
+
+## Status
+
+**Phase 0 — validating willingness to pay.** The MCP server and the free web tool are live. Because the real point of use is inside an agent's workflow rather than a search result, the signal being measured is MCP installs and repeat tool calls, not click-through rate. The GitHub App (Phase 1) starts only if that signal shows up.
+
+## Development
 
 ```bash
 npm install
-npm test          # 全テスト
+npm test           # unit tests
 npm run typecheck
-npm run smoke     # 実レジストリへの疎通確認
-npm run e2e       # 本番に対する E2E 6種
-                  #   ui          Playwright で実ブラウザ
-                  #   a11y        アクセシビリティ
-                  #   mcp         公式 MCP SDK クライアント
-                  #   load        並列実行時の一貫性
-                  #   adversarial 敵対的入力・境界値
-                  #   correctness 既知の正解との突き合わせ
-                  #   operational 経路間の一致・HTTP・キャッシュ
-npm run dev       # http://localhost:8787
+npm run coverage
+npm run smoke      # live registry connectivity
+npm run e2e        # end-to-end against production
+                   #   ui           real browser (Playwright)
+                   #   a11y         accessibility
+                   #   mcp          official MCP SDK client
+                   #   load         consistency under concurrency
+                   #   adversarial  hostile input and boundaries
+                   #   correctness  against known-good verdicts
+                   #   operational  cross-path agreement, HTTP, caching
+                   #   stdio        local and hosted paths must agree
+npm run dev        # http://localhost:8787
 ```
 
-ユニットテストが全て通っていても、実データを流すまで見つからない欠陥がある。
-`smoke` と `e2e` は本番相当の外部依存に対して実行するため、リリース前に必ず通すこと。
+Passing unit tests is not sufficient here. Several real defects only appeared once live registry data was involved, so `smoke` and `e2e` run against the real upstreams and must pass before a release.
 
-デプロイ:
+Deploy:
 
 ```bash
 npm run db:migrate
 npm run deploy
 ```
 
-## ドキュメント
+Built on Cloudflare Workers + Hono + D1.
 
-- 設計仕様書: [docs/specs/2026-08-19-license-guard-design.md](docs/specs/2026-08-19-license-guard-design.md)
-- Phase 0 実装計画: [docs/superpowers/plans/2026-08-19-phase0-free-web-tool.md](docs/superpowers/plans/2026-08-19-phase0-free-web-tool.md)
+## Documentation
 
-## 依存 OSS
+- Design spec: [docs/specs/2026-08-19-license-guard-design.md](docs/specs/2026-08-19-license-guard-design.md) (Japanese)
+- Phase 0 implementation plan: [docs/superpowers/plans/2026-08-19-phase0-free-web-tool.md](docs/superpowers/plans/2026-08-19-phase0-free-web-tool.md) (Japanese)
+- Registry publishing notes: [docs/PUBLISHING.md](docs/PUBLISHING.md) (Japanese)
 
-本製品自身が扱う題材の性質上、依存はすべて MIT / Apache-2.0 系に限定している。自社 SaaS に開示義務は発生しない。
+## What this depends on
 
-| 役割 | OSS | ライセンス |
+Given the subject matter, every dependency is deliberately MIT or Apache-2.0. Nothing here obliges disclosure for a SaaS deployment.
+
+| Role | Package | License |
 |---|---|---|
-| SPDX 式のパース | `spdx-expression-parse` | MIT |
-| Web フレームワーク | `hono` | MIT |
-| Go のライセンスデータ | ClearlyDefined API | Apache-2.0 |
+| SPDX expression parsing | `spdx-expression-parse` | MIT |
+| Web framework | `hono` | MIT |
+| Go license data | ClearlyDefined API | Apache-2.0 |
 
-## 免責
+## Privacy
 
-本ツールが提示するのは、公開されたライセンス条文と依存マニフェストに基づく**情報**であり、法的助言ではない。利用によって弁護士・依頼者関係は成立しない。判定はマニフェストに宣言されたライセンス情報に基づくものであり、全ての義務や違反を網羅するものではない。
+The hosted service does not store manifest contents or package names. See [`src/mcp/telemetry.ts`](src/mcp/telemetry.ts) for exactly what is recorded. If that is not good enough for your organization, run the local stdio server — it sends nothing but package names and versions, and only to the public registries that already publish them.
+
+## Disclaimer
+
+LicenseGuard provides **information** derived from published license texts and declared dependency metadata. It is not legal advice, and using it does not create an attorney-client relationship. Verdicts rest on the license information a package declares; they do not claim to identify every obligation or violation.
+
+## License
+
+Apache-2.0
