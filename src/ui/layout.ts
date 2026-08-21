@@ -133,6 +133,7 @@ export function renderLayout(o: LayoutOptions): string {
   <nav>
     <a href="/">Scan</a>
     <a href="/licenses">Licenses</a>
+    <a href="/compare">Compare</a>
   </nav>
 </div>
 ${o.body}

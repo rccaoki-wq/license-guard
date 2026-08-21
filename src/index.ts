@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { renderPage } from './ui/page';
 import { renderLicenseIndex, renderLicensePage } from './ui/license';
+import { findPair, renderCompareIndex, renderComparePage } from './ui/compare';
 import { renderPackageNotFound, renderPackagePage } from './ui/pkg';
 import { scan, withProvenanceNote } from './scan';
 import { LicenseCache } from './resolver/cache';
@@ -16,6 +17,7 @@ import { evaluateExpression } from './policy/engine';
 import { packagePath } from './ui/pkg';
 import { SITE_ORIGIN } from './ui/layout';
 import { FAVICON_SVG } from './ui/favicon';
+import { INDEXNOW_KEY, INDEXNOW_KEY_PATH } from './seo/indexnow';
 import type { DistributionModel, Ecosystem, Linkage, Scope } from './types';
 
 type Env = {
@@ -112,6 +114,11 @@ app.get('/healthz', (c) =>
 
 app.get('/robots.txt', (c) =>
   c.text(buildRobotsTxt(), 200, { 'cache-control': SEO_CACHE }),
+);
+
+// IndexNow の所有証明。中身は鍵そのもの（仕様）
+app.get(INDEXNOW_KEY_PATH, (c) =>
+  c.text(INDEXNOW_KEY, 200, { 'cache-control': SEO_CACHE }),
 );
 
 // カタログ（Docker Desktop / Glama / mcp.so）はアイコン URL を直接参照する
@@ -255,6 +262,25 @@ app.get('/api/pkg/:ecosystem/*', (c) => {
 app.get('/licenses', (c) =>
   c.html(renderLicenseIndex(), 200, { 'cache-control': SEO_CACHE }),
 );
+
+// 比較ページ。「AGPL と GPL は何が違うのか」が問いの自然な形なので、
+// その形のまま答えられる場所を用意する
+app.get('/compare', (c) =>
+  c.html(renderCompareIndex(), 200, { 'cache-control': SEO_CACHE }),
+);
+
+app.get('/compare/:slug', (c) => {
+  const raw = c.req.param('slug');
+  const at = raw.toLowerCase().indexOf('-vs-');
+  if (at < 0) return c.notFound();
+
+  const pair = findPair(raw.slice(0, at), raw.slice(at + 4));
+  if (!pair) return c.notFound();
+
+  const html = renderComparePage(pair);
+  if (html === null) return c.notFound();
+  return c.html(html, 200, { 'cache-control': SEO_CACHE });
+});
 
 app.get('/license/:id', (c) => {
   const entry = findLicense(c.req.param('id'));

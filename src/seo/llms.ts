@@ -1,5 +1,6 @@
 import { LICENSE_CATALOG } from './catalog';
 import { SITE_ORIGIN } from '../ui/layout';
+import { COMPARE_PAIRS, comparePath } from '../ui/compare';
 
 /**
  * llms.txt — LLM とエージェントに、このサイトが何であり
@@ -50,9 +51,17 @@ manifests; code fragments copied into a project's own source are not detected.
 
 ${LICENSE_CATALOG.map((l) => `- [${l.id}](${SITE_ORIGIN}/license/${encodeURIComponent(l.id)}): ${l.name}`).join('\n')}
 
+## Which licenses actually differ
+
+Two licenses described in nearly the same words can produce opposite answers. These pages
+put pairs side by side and name the clause that causes each difference.
+
+${COMPARE_PAIRS.map((c) => `- [${c.a} vs ${c.b}](${SITE_ORIGIN}${comparePath(c)}): ${c.why}`).join('\n')}
+
 ## Optional
 
 - [License index](${SITE_ORIGIN}/licenses)
+- [Comparison index](${SITE_ORIGIN}/compare)
 - [Interactive scanner](${SITE_ORIGIN}/)
 `;
 }

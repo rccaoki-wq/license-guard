@@ -24,7 +24,8 @@
     "coverage": "vitest run --coverage.enabled --coverage.provider=v8 --coverage.reporter=text --coverage.include=src/**",
     "build:stdio": "esbuild src/local/stdio.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/stdio.mjs",
     "e2e:stdio": "node e2e/stdio.spec.mjs",
-    "signals": "node scripts/signals.mjs"
+    "signals": "node scripts/signals.mjs",
+    "indexnow": "node --experimental-strip-types scripts/indexnow.mjs"
   },
   "dependencies": {
     "hono": "^4.6.0",

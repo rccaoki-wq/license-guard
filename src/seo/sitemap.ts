@@ -1,5 +1,6 @@
 import { LICENSE_CATALOG, SEED_PACKAGES } from './catalog';
 import { packagePath } from '../ui/pkg';
+import { COMPARE_PAIRS, comparePath } from '../ui/compare';
 import { SITE_ORIGIN } from '../ui/layout';
 import type { Ecosystem } from '../types';
 
@@ -29,7 +30,9 @@ export function buildSitemap(packages: SitemapPackage[]): string {
   const paths = [
     '/',
     '/licenses',
+    '/compare',
     ...LICENSE_CATALOG.map((l) => `/license/${encodeURIComponent(l.id)}`),
+    ...COMPARE_PAIRS.map(comparePath),
   ];
 
   // 実績のあるパッケージを優先し、枠が余ればシードで埋める
