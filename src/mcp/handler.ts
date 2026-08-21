@@ -12,7 +12,7 @@ import { TOOL_DEFINITIONS, callTool, type ToolContext } from './tools';
 import { RESOURCE_DESCRIPTORS, readResource } from './resources';
 import { PROMPT_DESCRIPTORS, getPrompt } from './prompts';
 import { isSyntheticRequest, sanitizeSessionId, type McpEvent, type Recorder } from './telemetry';
-import { SITE_ORIGIN } from '../ui/layout';
+import { LEGACY_ORIGIN, SITE_ORIGIN } from '../ui/layout';
 
 export interface HandlerContext extends ToolContext {
   /** 省略可。計測が無くてもサーバーは動作する */
@@ -55,7 +55,8 @@ const ALLOWED_ORIGIN_PATTERNS = [
 
 export function isAllowedOrigin(origin: string | null | undefined): boolean {
   if (!origin) return true;
-  if (origin === SITE_ORIGIN) return true;
+  // 旧ホストも通す。既に導入済みの設定はこちらを指している
+  if (origin === SITE_ORIGIN || origin === LEGACY_ORIGIN) return true;
   return ALLOWED_ORIGIN_PATTERNS.some((re) => re.test(origin));
 }
 

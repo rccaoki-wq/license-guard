@@ -3,6 +3,23 @@ main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+# 独自ドメイン。
+#
+# workers.dev は Cloudflare 自身が持つゾーンなので、割り当てられたサブドメインに
+# DNS レコードを足せない。ホスト名そのものへの TXT を要求する検証
+# （Smithery の verified 等）は、そのままでは永久に通せなかった。
+#
+# **workers_dev = true を消してはいけない。** routes を足した時点で
+# wrangler は workers.dev を既定で無効化する。公式 MCP レジストリ・Glama・
+# Smithery・mcp.so・docker/mcp-registry・awesome-mcp-servers の掲載は
+# すべて workers.dev の URL を指しているので、消すと全部同時に壊れる。
+# 実際に一度無効化してしまい、デプロイ直後の警告で気づいた。
+workers_dev = true
+
+[[routes]]
+pattern = "licenseguard.tenchorooms.com"
+custom_domain = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "license-guard"

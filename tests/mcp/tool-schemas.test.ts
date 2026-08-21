@@ -73,11 +73,11 @@ describe('ツール定義の体裁', () => {
 
   it('inputSchema が required を宣言する（何が必須か伝わらないと使えない）', () => {
     for (const t of TOOL_DEFINITIONS) {
-      const req = (t.inputSchema as { required?: string[] }).required;
+      const req = (t.inputSchema as unknown as { required?: readonly string[] }).required;
       expect(req, t.name).toBeDefined();
       expect(req!.length, t.name).toBeGreaterThan(0);
       // required に挙げた名前が properties に実在すること
-      const props = Object.keys((t.inputSchema as { properties: object }).properties);
+      const props = Object.keys((t.inputSchema as unknown as { properties: object }).properties);
       for (const r of req!) expect(props, `${t.name}.${r}`).toContain(r);
     }
   });
@@ -91,7 +91,7 @@ describe('ツール定義の体裁', () => {
 
   it('全パラメータに説明がある（型だけでは何を入れるか分からない）', () => {
     for (const t of TOOL_DEFINITIONS) {
-      const props = (t.inputSchema as { properties: Record<string, { description?: string }> })
+      const props = (t.inputSchema as unknown as { properties: Record<string, { description?: string }> })
         .properties;
       for (const [k, v] of Object.entries(props)) {
         expect(v.description, `${t.name}.${k}`).toBeTruthy();

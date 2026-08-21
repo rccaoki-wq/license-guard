@@ -4,6 +4,7 @@ import { renderPackageNotFound, renderPackagePage, packagePath } from '../../src
 import { LICENSE_CATALOG, findLicense } from '../../src/seo/catalog';
 import { buildRobotsTxt, buildSitemap } from '../../src/seo/sitemap';
 import { renderPage } from '../../src/ui/page';
+import { SITE_ORIGIN } from '../../src/ui/layout';
 
 describe('LICENSE_CATALOG', () => {
   it('SPDX ID が重複しない', () => {
@@ -134,7 +135,8 @@ describe('renderPackageNotFound', () => {
 describe('buildSitemap', () => {
   it('トップとライセンスページを含む', () => {
     const xml = buildSitemap([]);
-    expect(xml).toContain('<loc>https://license-guard.rcc-aoki.workers.dev/</loc>');
+    // URL を直書きするとドメインを移すたびに落ちる。意味は「正規の出所を指すこと」
+    expect(xml).toContain(`<loc>${SITE_ORIGIN}/</loc>`);
     expect(xml).toContain('/license/AGPL-3.0-only');
   });
 
@@ -159,7 +161,7 @@ describe('buildSitemap', () => {
 describe('buildRobotsTxt', () => {
   it('sitemap を指し API を除外する', () => {
     const txt = buildRobotsTxt();
-    expect(txt).toContain('Sitemap: https://license-guard.rcc-aoki.workers.dev/sitemap.xml');
+    expect(txt).toContain(`Sitemap: ${SITE_ORIGIN}/sitemap.xml`);
     expect(txt).toContain('Disallow: /api/');
   });
 });

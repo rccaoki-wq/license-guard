@@ -8,7 +8,24 @@ export function esc(s: unknown): string {
   );
 }
 
-export const SITE_ORIGIN = 'https://license-guard.rcc-aoki.workers.dev';
+/**
+ * 正規の出所。canonical・OG・sitemap・llms.txt がこれを基準にする。
+ *
+ * workers.dev から移した理由は 1 つだけ。**あのホストには DNS レコードを
+ * 足せない。** workers.dev は Cloudflare 自身のゾーンなので、ホスト名そのものへの
+ * TXT を要求する検証（Smithery の verified 等）を永久に通せなかった。
+ */
+export const SITE_ORIGIN = 'https://licenseguard.tenchorooms.com';
+
+/**
+ * 旧ホスト。**外し方に注意。**
+ *
+ * 公式 MCP レジストリ・Glama・Smithery・mcp.so・docker/mcp-registry・
+ * awesome-mcp-servers の掲載と、既に導入した利用者の設定が、すべてこの URL を
+ * 指している。`claude mcp add` した相手のマシンに入っているものは、こちらから
+ * 直せない。したがって**このホストは畳まない**。
+ */
+export const LEGACY_ORIGIN = 'https://license-guard.rcc-aoki.workers.dev';
 
 const STYLES = `
 :root{--bg:#fff;--fg:#16161a;--muted:#6b6b76;--line:#e4e4e8;--card:#fafafa;

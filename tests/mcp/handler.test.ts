@@ -38,9 +38,15 @@ describe('Origin 検証（DNS リバインディング対策）', () => {
   });
 
   it('自サイトと localhost と claude.ai を許可する', () => {
-    expect(isAllowedOrigin('https://license-guard.rcc-aoki.workers.dev')).toBe(true);
+    expect(isAllowedOrigin('https://licenseguard.tenchorooms.com')).toBe(true);
     expect(isAllowedOrigin('http://localhost:6274')).toBe(true);
     expect(isAllowedOrigin('https://claude.ai')).toBe(true);
+  });
+
+  it('旧ホストを引き続き許可する（導入済みの設定を壊さない）', () => {
+    // レジストリ各所の掲載と、既に `claude mcp add` した利用者の設定が
+    // この URL を指している。こちらからは直せないので畳まない
+    expect(isAllowedOrigin('https://license-guard.rcc-aoki.workers.dev')).toBe(true);
   });
 
   it('見知らぬオリジンを拒否する', () => {
