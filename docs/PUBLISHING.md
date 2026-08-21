@@ -64,6 +64,22 @@ curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guar
 | [wong2/awesome-mcp-servers](https://github.com/wong2/awesome-mcp-servers) | 4.3千スター | PR不可。[mcpservers.org/submit](https://mcpservers.org/submit) のフォーム（**ブラウザとメールアドレスが要る**） |
 | [smithery.ai](https://smithery.ai) | 7千件超 | **登録済** `rcc-aoki/license-guard`。スキャンは3ツールを検出。ただし掲載本文は空のまま（後述） |
 
+## ホスト名が 2 つある理由（触る前に読むこと）
+
+| 用途 | ホスト |
+|---|---|
+| サイトの正規URL・canonical・sitemap・llms.txt・Smithery の homepage | `licenseguard.tenchorooms.com` |
+| **カタログ 6 箇所の掲載と、導入済み利用者の設定** | `license-guard.rcc-aoki.workers.dev` |
+
+**掲載側は意図的に workers.dev のままにしている。** 一貫性のために書き換えたく
+なるが、やらないこと。`licenseguard.tenchorooms.com` は無関係な家計簿サイトの
+サブドメインで、開発者から見ると不可解に映る。中立に見える workers.dev を
+機械向けの入口として残すほうが良い、という判断。
+
+**どちらのホストも落とさない。** 特に `wrangler.toml` の `workers_dev = true` は
+消さないこと（理由はそのファイルに書いてある）。`npm run e2e:operational` が
+旧ホストの HTML・MCP・判定の一致を毎回確認する。落ちれば E2E が赤くなる。
+
 ### Smithery の verified バッジは workers.dev では取れない
 
 検証条件は6つあり、うち1つが「**homepage のホスト名そのものに TXT レコード**」。

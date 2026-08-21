@@ -167,5 +167,36 @@ for (const [path, jsonCheck] of disclaimerChecks) {
   }
 }
 
+// --- 旧ホストが生きていること ---
+//
+// これは体裁の確認ではない。公式 MCP レジストリ・Glama・Smithery・mcp.so・
+// docker/mcp-registry・awesome-mcp-servers の掲載と、既に `claude mcp add` した
+// 利用者の設定は、すべて workers.dev の URL を指している。最後のものはこちらから
+// 直せないので、**このホストが落ちたことに気づく手段が要る。**
+//
+// 実際に一度落としかけた。wrangler は routes を足すと workers_dev を既定で
+// 無効化する。デプロイ出力の警告に気づかなければ、全部同時に沈黙していた。
+const LEGACY = 'https://license-guard.rcc-aoki.workers.dev';
+
+const legacyHome = await fetchWithBackoff(LEGACY + '/');
+check('旧ホストの HTML が生きている', legacyHome.status === 200, `status=${legacyHome.status}`);
+
+const legacyMcp = await fetchWithBackoff(LEGACY + '/mcp', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+});
+const legacyTools = legacyMcp.ok ? (await legacyMcp.json()).result?.tools ?? [] : [];
+check('旧ホストの MCP が生きている', legacyTools.length === 3, `${legacyTools.length} tools`);
+
+// 経路が違っても答えは同じでなければならない
+const [newV, oldV] = await Promise.all(
+  [B, LEGACY].map(async (host) => {
+    const r = await fetchWithBackoff(`${host}/api/pkg/pypi/pyload-ng?model=saas`);
+    return (await r.json()).verdict;
+  }),
+);
+check('新旧ホストで判定が一致する', newV === oldV && newV === 'blocked', `new=${newV} old=${oldV}`);
+
 console.log(fail === 0 ? '\nRound 3: 全て通過' : `\nRound 3: ${fail} 件失敗`);
 process.exit(fail === 0 ? 0 : 1);
