@@ -120,7 +120,26 @@ describe('initialize', () => {
     const { json } = await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
     expect(json.result.capabilities.tools).toBeDefined();
     expect(json.result.serverInfo.name).toBe('licenseguard');
-    expect(json.result.instructions).toContain('distribution model');
+  });
+
+  // instructions はエージェントの文脈に必ず入る唯一のテキスト。
+  // 「何ができるか」を書いても、そもそも調べようと思わなければ呼ばれない。
+  // 引き金・配布モデル・dev免除・未確認の扱いが落ちていないことを見る。
+  it('instructions が呼ぶ場面を指示する', async () => {
+    const { json } = await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+    const t: string = json.result.instructions;
+
+    // 引き金（依存を足すとき）
+    expect(t).toContain('about to add a dependency');
+    expect(t).toContain('without being asked');
+    // 配布モデルを必ず渡させる
+    expect(t).toContain('distribution_model');
+    // dev スコープの免除。ここを外すとオオカミ少年になる
+    expect(t).toMatch(/scope "dev"/);
+    // 未確認を通過扱いさせない
+    expect(t).toContain('is not a pass');
+    // 法的助言でないこと
+    expect(t).toContain('not legal advice');
   });
 
   it('セッションIDを発行する（計測の帰属のため）', async () => {

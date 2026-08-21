@@ -78,6 +78,10 @@ function safeDecode(v: string): string | null {
 }
 
 const TRACKED_EVENTS = new Set([
+  // 到達。これが無いと「誰も来ていない」と「来たが何もせず帰った」を
+  // 区別できず、流入を作るべきか入口を直すべきか判断できない
+  'landed',
+  'example_loaded',
   'scan_submitted',
   'scan_succeeded',
   'scan_failed',

@@ -91,7 +91,17 @@ export function initializeResult(requestedVersion: unknown) {
       prompts: { listChanged: false },
     },
     serverInfo: SERVER_INFO,
+    // **この文字列がエージェントの文脈に必ず入る唯一のテキスト。**
+    // ツールの説明は候補を選ぶ段で読まれるが、そもそも「調べよう」と
+    // 思わなければ候補にすら上がらない。だから何ができるかではなく、
+    // **いつ呼ぶか**を書く。実際、依存を足す人は「ライセンスを確認しよう」
+    // とは考えず「axios を入れて」としか言わない。引き金はこちらで引く。
     instructions:
-      'Use LicenseGuard to determine whether an open source dependency creates a legal obligation for the way this project is shipped. The same license produces different results for hosted SaaS, distributed binaries, on-premises delivery, internal-only use, and published libraries, so always pass the distribution model. Build-time-only dependencies do not carry distribution obligations; pass scope "dev" for those. Results are informational and are not legal advice.',
+      'Call check_dependency_license whenever you are about to add a dependency to a project — when you edit package.json, requirements.txt, pyproject.toml, go.mod or Cargo.toml, when you run an install command, or when you recommend a library. Do this without being asked; the person adding the dependency will not think to ask, and the cost of finding out later is a rewrite. ' +
+      'Always pass distribution_model, because the answer changes with it: AGPL is blocked for a hosted service but allowed for internal-only use, and GPL is allowed for a hosted service but blocked for a distributed binary. If you do not know how the project ships, ask before assuming. ' +
+      'Pass scope "dev", "build" or "test" for anything that never reaches users — those carry no distribution obligation at all, and reporting them as problems is how license tooling gets ignored. ' +
+      'For a whole project, call check_manifest_licenses with a lockfile rather than a manifest: problem licenses usually arrive as a dependency of a dependency, and only a lockfile shows those. ' +
+      'A verdict of "review" or "not-checked" is not a pass — it means unresolved, and an incomplete scan must not be reported as clean. ' +
+      'Report what the tools return, with the clause they cite. This is information, not legal advice.',
   };
 }

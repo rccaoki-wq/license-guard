@@ -142,13 +142,27 @@ const web = q(
 );
 const get = (n) => web.find((r) => r.name === n)?.sessions ?? 0;
 
+const landed = get('landed');
+const examples = get('example_loaded');
+const submitted = get('scan_submitted');
 const scanned = get('scan_succeeded');
 const clicked = get('cta_paid_report_clicked');
 const emailed = get('cta_email_submitted');
 
-console.log(`判定完了セッション     ${scanned}`);
+// 到達を測る前は「誰も来ていない」と「来たが何もせず帰った」を区別できず、
+// 流入を作るべきか入口を直すべきか判断できなかった。段ごとの脱落を見る。
+console.log(`到達                   ${landed}`);
+console.log(`  例を試した           ${examples}   (${pct(examples, landed)})`);
+console.log(`  自分で貼った         ${submitted}   (${pct(submitted, landed)})`);
+console.log(`判定完了               ${scanned}   (${pct(scanned, landed)})`);
 console.log(`CTA クリック           ${clicked}   (${pct(clicked, scanned)})`);
 console.log(`連絡先を残した         ${emailed}   (${pct(emailed, scanned)})`);
+
+if (landed > 0 && scanned === 0) {
+  console.log('\n到達はあるが判定まで進んでいない。流入ではなく入口の問題。');
+} else if (landed === 0) {
+  console.log('\n到達が 0。入口を直しても意味がない。流入を作る段階。');
+}
 
 const [webNull] = q('SELECT COUNT(*) n FROM events WHERE synthetic IS NULL');
 if (webNull.n > 0) console.log(`\n帰属不能（計測前）     ${webNull.n} 行を除外済み`);

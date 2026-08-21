@@ -45,7 +45,44 @@ function track(name) {
   }).catch(() => {});
 }
 
+// 到達を記録する。これが無いと「誰も来ていない」と「来たが何もせず帰った」を
+// 区別できない。この2つは打ち手が正反対（流入を作る / 入口を直す）なので、
+// 区別できないままでは判断のしようがなかった。
+track('landed');
+
 const LABEL = { allowed: 'No obligation', review: 'Needs review', blocked: 'Obligation triggered' };
+
+/**
+ * 実在パッケージだけで作った例。
+ *
+ * 空のテキストエリアの前で、見知らぬ訪問者にロックファイルを探させるのは
+ * 初回価値までの手間が大きすぎる。ここを押せば 1 クリックで結論が出る。
+ *
+ * 中身は実測で確かめた本物のライセンスで、**配布モデルを切り替えると
+ * 結論が入れ替わる**ように選んである。説明を読ませずに製品の中身を見せる。
+ *   express  MIT                 どのモデルでも allowed
+ *   nodebb   GPL-3.0             saas では allowed / 配布では blocked
+ *   budibase AGPL-3.0-or-later   saas で blocked（第13条）/ 社内利用なら allowed
+ */
+const EXAMPLE = JSON.stringify({
+  name: 'example-app',
+  version: '1.0.0',
+  lockfileVersion: 3,
+  packages: {
+    '': { name: 'example-app', version: '1.0.0' },
+    'node_modules/express': { version: '4.18.2', license: 'MIT' },
+    'node_modules/nodebb': { version: '3.7.0', license: 'GPL-3.0' },
+    'node_modules/budibase': { version: '2.32.0', license: 'AGPL-3.0-or-later' },
+  },
+}, null, 2);
+
+$('example').addEventListener('click', (e) => {
+  e.preventDefault();
+  $('content').value = EXAMPLE;
+  $('error').classList.add('hidden');
+  track('example_loaded');
+  $('run').click();
+});
 
 // 関心表明と一緒に送る集計。誰が困っているときに関心を持つのかを知るため
 let lastVerdictMix = null;
@@ -166,7 +203,8 @@ export function renderPage(): string {
 <textarea id="content" placeholder="Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock) or a manifest"></textarea>
 <p class="hint"><strong>Paste a lockfile if you have one.</strong> It covers transitive dependencies — where problematic licenses usually arrive — and carries exact versions. npm, PyPI, Go, and Rust are supported. Pasted content is used to look up licenses and is not stored.</p>
 
-<p style="margin-top:18px"><button class="btn" id="run">Check licenses</button></p>
+<p style="margin-top:18px"><button class="btn" id="run">Check licenses</button>
+<a href="#" id="example" style="margin-left:14px">Or see it on an example</a></p>
 <p id="error" class="err hidden"></p>
 
 <div id="result" class="hidden">
