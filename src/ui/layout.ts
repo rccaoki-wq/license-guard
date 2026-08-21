@@ -66,6 +66,22 @@ Results reflect license metadata as declared; they do not identify every obligat
 Consult qualified counsel for decisions that matter.
 </p>`;
 
+/**
+ * どこに載っているかを全ページの末尾に置く。
+ *
+ * 2つ意味がある。ひとつは、無認証の無料ツールが本物かどうかを判断する材料に
+ * 第三者カタログの掲載状況が使われること。もうひとつは、カタログ側が
+ * 逆リンクを検証条件にしていること（Smithery は README・homepage・指定URLの
+ * いずれかにサーバーページへのリンクがあるかを見る）。
+ */
+export const LISTINGS_HTML = `<p class="disclaimer">
+Listed in the
+<a href="https://registry.modelcontextprotocol.io/v0/servers?search=license-guard" rel="noopener">official MCP registry</a>,
+on <a href="https://glama.ai/mcp/servers/rccaoki-wq/license-guard" rel="noopener">Glama</a>
+and on <a href="https://smithery.ai/servers/rcc-aoki/license-guard" rel="noopener">Smithery</a>.
+Source on <a href="https://github.com/rccaoki-wq/license-guard" rel="noopener">GitHub</a> (Apache-2.0).
+</p>`;
+
 export interface LayoutOptions {
   title: string;
   description: string;
@@ -104,6 +120,7 @@ export function renderLayout(o: LayoutOptions): string {
 </div>
 ${o.body}
 ${DISCLAIMER_HTML}
+${LISTINGS_HTML}
 </div>
 ${o.script ? `<script>${o.script}</script>` : ''}
 </body>

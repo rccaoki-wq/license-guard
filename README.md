@@ -2,6 +2,12 @@
 
 *English | [日本語](README.ja.md)*
 
+[![Glama quality](https://glama.ai/mcp/servers/rccaoki-wq/license-guard/badges/score.svg)](https://glama.ai/mcp/servers/rccaoki-wq/license-guard)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.rccaoki--wq%2Flicense--guard-0a7c3f)](https://registry.modelcontextprotocol.io/v0/servers?search=license-guard)
+[![License](https://img.shields.io/badge/license-Apache--2.0-1a5fd0)](LICENSE)
+
+Also listed on [Smithery](https://smithery.ai/servers/rcc-aoki/license-guard) and in the [Docker MCP catalog](https://github.com/docker/mcp-registry).
+
 **Does this dependency's license create an obligation for the way *you* ship software?**
 
 Generic license scanners answer a different question — "what license is this?" — and then warn on everything. LicenseGuard evaluates the license against your distribution model, so the same license produces different verdicts depending on how the software reaches its users.
