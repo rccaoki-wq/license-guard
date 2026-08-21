@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import app from '../src/index';
+import { useOfflineUpstream } from './helpers/offline';
 import { detectAndParse, MAX_LOOKUPS } from '../src/manifests';
 import { scan } from '../src/scan';
 import type { CacheLike } from '../src/resolver';
@@ -34,6 +35,9 @@ const noopCache: CacheLike = {
   },
   async put() {},
 };
+
+// 上流レジストリへ出ない。名前検証を第三者の応答時間に依存させないため
+useOfflineUpstream();
 
 describe('監査#3 照会が必要な依存数の上限', () => {
   it('上限を超えても黙って切り詰めず、未確認として明示する', async () => {

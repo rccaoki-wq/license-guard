@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import app from '../src/index';
+import { useOfflineUpstream } from './helpers/offline';
 
 function fakeEnv() {
   return {
@@ -20,6 +21,9 @@ function fakeEnv() {
 }
 
 const status = async (path: string) => (await app.request(path, {}, fakeEnv())).status;
+
+// 上流レジストリへ出ない。名前検証を第三者の応答時間に依存させないため
+useOfflineUpstream();
 
 describe('スコープ付き npm パッケージのURL', () => {
   it('リテラルのスラッシュ形式を受け付ける', async () => {
