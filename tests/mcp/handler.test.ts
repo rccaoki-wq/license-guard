@@ -347,7 +347,14 @@ describe('tools/call — explain_license', () => {
 
 describe('エラー処理', () => {
   it('未知メソッドは -32601', async () => {
-    const { json } = await rpc({ jsonrpc: '2.0', id: 9, method: 'resources/list' });
+    // 以前はここで resources/list を使っていたが、実装したので未知ではなくなった。
+    // 「まだ実装していないもの」を例に使うと、実装した日に意味が変わる
+    const { json } = await rpc({ jsonrpc: '2.0', id: 9, method: 'no/such/method' });
+    expect(json.error.code).toBe(-32601);
+  });
+
+  it('宣言していない機能は -32601（completion は持たない）', async () => {
+    const { json } = await rpc({ jsonrpc: '2.0', id: 10, method: 'completion/complete' });
     expect(json.error.code).toBe(-32601);
   });
 

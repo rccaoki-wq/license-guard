@@ -82,8 +82,14 @@ export function negotiateVersion(requested: unknown): string {
 export function initializeResult(requestedVersion: unknown) {
   return {
     protocolVersion: negotiateVersion(requestedVersion),
-    // ツール一覧は静的なので listChanged 通知は出さない
-    capabilities: { tools: { listChanged: false } },
+    // どれも静的なので listChanged 通知は出さない。
+    // subscribe を宣言しないのは、リソースが変わらないため（変わらないものの
+    // 購読を受け付けても、通知を送る機会が来ない）。
+    capabilities: {
+      tools: { listChanged: false },
+      resources: { listChanged: false, subscribe: false },
+      prompts: { listChanged: false },
+    },
     serverInfo: SERVER_INFO,
     instructions:
       'Use LicenseGuard to determine whether an open source dependency creates a legal obligation for the way this project is shipped. The same license produces different results for hosted SaaS, distributed binaries, on-premises delivery, internal-only use, and published libraries, so always pass the distribution model. Build-time-only dependencies do not carry distribution obligations; pass scope "dev" for those. Results are informational and are not legal advice.',

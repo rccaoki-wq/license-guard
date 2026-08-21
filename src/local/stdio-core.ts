@@ -7,6 +7,8 @@ import {
   type JsonRpcRequest,
 } from '../mcp/protocol';
 import { TOOL_DEFINITIONS, callTool, type ToolContext } from '../mcp/tools';
+import { RESOURCE_DESCRIPTORS, readResource } from '../mcp/resources';
+import { PROMPT_DESCRIPTORS, getPrompt } from '../mcp/prompts';
 import { cacheKey } from '../resolver/cache';
 import type { CacheLike } from '../resolver';
 import type { Dependency } from '../types';
@@ -108,6 +110,44 @@ export async function handleLocalMessage(
 
     case 'tools/list':
       return successResponse(id, { tools: TOOL_DEFINITIONS });
+
+    // リソースとプロンプトはホスト版と同一。どちらも純粋な生成物なので、
+    // 経路が違っても中身が変わることはない
+    case 'resources/list':
+      return successResponse(id, { resources: RESOURCE_DESCRIPTORS });
+
+    case 'resources/templates/list':
+      return successResponse(id, { resourceTemplates: [] });
+
+    case 'resources/read': {
+      const contents = readResource(msg.params?.['uri']);
+      if (contents === null) {
+        return errorResponse(
+          id,
+          ERROR_CODES.INVALID_PARAMS,
+          `Unknown resource: ${String(msg.params?.['uri'])}`,
+        );
+      }
+      return successResponse(id, contents);
+    }
+
+    case 'prompts/list':
+      return successResponse(id, { prompts: PROMPT_DESCRIPTORS });
+
+    case 'prompts/get': {
+      const prompt = getPrompt(
+        msg.params?.['name'],
+        (msg.params?.['arguments'] ?? {}) as Record<string, unknown>,
+      );
+      if (prompt === null) {
+        return errorResponse(
+          id,
+          ERROR_CODES.INVALID_PARAMS,
+          `Unknown prompt: ${String(msg.params?.['name'])}`,
+        );
+      }
+      return successResponse(id, prompt);
+    }
 
     case 'tools/call': {
       const name = msg.params?.['name'];

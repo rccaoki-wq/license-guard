@@ -9,6 +9,8 @@ import {
   type JsonRpcRequest,
 } from './protocol';
 import { TOOL_DEFINITIONS, callTool, type ToolContext } from './tools';
+import { RESOURCE_DESCRIPTORS, readResource } from './resources';
+import { PROMPT_DESCRIPTORS, getPrompt } from './prompts';
 import { isSyntheticRequest, sanitizeSessionId, type McpEvent, type Recorder } from './telemetry';
 import { SITE_ORIGIN } from '../ui/layout';
 
@@ -124,6 +126,44 @@ async function dispatch(
 
     case 'tools/list':
       return successResponse(id, { tools: TOOL_DEFINITIONS });
+
+    case 'resources/list':
+      return successResponse(id, { resources: RESOURCE_DESCRIPTORS });
+
+    case 'resources/templates/list':
+      // テンプレートは持たない。空で答えるのが仕様上の正解で、
+      // ここで -32601 を返すとリソース対応が中途半端に見える
+      return successResponse(id, { resourceTemplates: [] });
+
+    case 'resources/read': {
+      const contents = readResource(msg.params?.['uri']);
+      if (contents === null) {
+        return errorResponse(
+          id,
+          ERROR_CODES.INVALID_PARAMS,
+          `Unknown resource: ${String(msg.params?.['uri'])}`,
+        );
+      }
+      return successResponse(id, contents);
+    }
+
+    case 'prompts/list':
+      return successResponse(id, { prompts: PROMPT_DESCRIPTORS });
+
+    case 'prompts/get': {
+      const prompt = getPrompt(
+        msg.params?.['name'],
+        (msg.params?.['arguments'] ?? {}) as Record<string, unknown>,
+      );
+      if (prompt === null) {
+        return errorResponse(
+          id,
+          ERROR_CODES.INVALID_PARAMS,
+          `Unknown prompt: ${String(msg.params?.['name'])}`,
+        );
+      }
+      return successResponse(id, prompt);
+    }
 
     case 'tools/call': {
       const name = msg.params?.['name'];

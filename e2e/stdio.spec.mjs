@@ -63,6 +63,53 @@ const explain = await client.callTool({
 });
 check('MPL 静的リンクが allowed', explain.structuredContent?.byDistributionModel?.[0]?.verdict === 'allowed');
 
+// --- リソースとプロンプト ---
+// ホスト版と同じ中身が、公式 SDK クライアント経由でも取れることを見る。
+// ユニットテストは関数を直接比べているだけで、実プロセスを通していない。
+
+const caps = client.getServerCapabilities();
+check('resources と prompts を宣言している', !!caps?.resources && !!caps?.prompts);
+
+const { resources } = await client.listResources();
+check('リソースを列挙する', resources.length >= 20, `${resources.length} 件`);
+
+const agplUri = 'licenseguard://license/AGPL-3.0-only';
+const read = await client.readResource({ uri: agplUri });
+const body = read.contents?.[0]?.text ?? '';
+check('リソースが判定表を含む', body.includes('blocked') && body.includes('allowed'));
+check('リソースが dev スコープの免除に触れる', body.includes('build-time-only'));
+check('リソースが法的助言でないと明示する', body.includes('Not legal advice'));
+
+// リソースの判定が、同じ問いに対するツールの答えと一致すること。
+// ここが割れると「読んだ答え」と「呼んだ答え」が食い違う
+const agplSaas = await client.callTool({
+  name: 'check_dependency_license',
+  arguments: { ecosystem: 'pypi', name: 'pyload-ng', distribution_model: 'saas' },
+});
+check(
+  'リソースとツールの判定が一致する',
+  body.includes('| blocked |') && agplSaas.structuredContent?.verdict === 'blocked',
+);
+
+const { prompts } = await client.listPrompts();
+check('プロンプトを列挙する', prompts.length === 2, prompts.map((p) => p.name).join(','));
+
+const audit = await client.getPrompt({
+  name: 'audit_project',
+  arguments: { distribution_model: 'saas' },
+});
+const auditText = audit.messages?.[0]?.content?.text ?? '';
+check('audit_project がロックファイルを優先させる', auditText.includes('package-lock.json'));
+check('audit_project が未確認を安全と報告させない', auditText.includes('not-checked'));
+
+let unknownPromptRejected = false;
+try {
+  await client.getPrompt({ name: 'no-such-prompt', arguments: {} });
+} catch {
+  unknownPromptRejected = true;
+}
+check('未知のプロンプトを拒否する', unknownPromptRejected);
+
 await client.close();
 console.log(fail === 0 ? '\nローカル stdio: 全て通過' : `\nローカル stdio: ${fail} 件失敗`);
 process.exit(fail === 0 ? 0 : 1);
