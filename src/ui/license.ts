@@ -1,7 +1,7 @@
 import { verdictMatrix } from '../policy/matrix';
 import { categorize } from '../policy/categories';
 import { LICENSE_CATALOG, type LicenseEntry } from '../seo/catalog';
-import { esc, obligationBadges, renderLayout, scanCta, verdictTable } from './layout';
+import { esc, faqJsonLd, obligationBadges, renderLayout, scanCta, verdictTable, MODEL_LABEL } from './layout';
 import type { LicenseCategory } from '../types';
 
 const CATEGORY_LABEL: Record<LicenseCategory, string> = {
@@ -75,6 +75,19 @@ ${LICENSE_CATALOG.filter((l) => l.id !== entry.id)
     description,
     path: `/license/${encodeURIComponent(entry.id)}`,
     body,
+    // 実際に投げられる問いの形で、答えを機械可読にする。
+    // 判定文は verdictMatrix の出力そのままで、ここで書き起こさない。
+    // 書き起こすと表と JSON-LD で違うことを言い始める。
+    jsonLd: faqJsonLd([
+      ...runtime.map((r) => ({
+        question: `Can I use ${entry.id} in ${MODEL_LABEL[r.model].toLowerCase()}?`,
+        answer: r.rationale,
+      })),
+      {
+        question: `Does ${entry.id} matter if it is only a build-time or dev dependency?`,
+        answer: dev.rationale,
+      },
+    ]),
   });
 }
 

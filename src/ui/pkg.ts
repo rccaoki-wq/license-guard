@@ -1,6 +1,6 @@
 import { verdictMatrix } from '../policy/matrix';
 import { findLicense } from '../seo/catalog';
-import { esc, obligationBadges, renderLayout, scanCta, verdictTable } from './layout';
+import { MODEL_LABEL, faqJsonLd, esc, obligationBadges, renderLayout, scanCta, verdictTable } from './layout';
 import type { Ecosystem, Linkage } from '../types';
 
 const ECOSYSTEM_LABEL: Record<Ecosystem, string> = {
@@ -92,6 +92,19 @@ ${scanCta(`This page covers one package. Your ${MANIFEST_NAME[ecosystem]} has ma
     description,
     path: packagePath(ecosystem, name),
     body,
+    // 「この依存は使えるのか」という問いそのままの形で機械可読にする。
+    // 判定文は verdictMatrix の出力で、ここで書き起こさない
+    jsonLd: faqJsonLd([
+      { question: `Is ${name} safe for commercial use?`, answer: headline },
+      ...rows.map((r) => ({
+        question: `Can I use ${name} (${spdx}) in ${MODEL_LABEL[r.model]!.toLowerCase()}?`,
+        answer: r.rationale,
+      })),
+      {
+        question: `Does ${name} matter if it is only a build-time or dev dependency?`,
+        answer: dev.rationale,
+      },
+    ]),
   });
 }
 

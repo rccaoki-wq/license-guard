@@ -13,7 +13,7 @@
  */
 import { verdictMatrix, type MatrixRow } from '../policy/matrix';
 import { findLicense, type LicenseEntry } from '../seo/catalog';
-import { esc, renderLayout, scanCta } from './layout';
+import { esc, faqJsonLd, renderLayout, scanCta } from './layout';
 
 export interface ComparePair {
   a: string;
@@ -196,7 +196,34 @@ ${sideBySide(rowsA, rowsB, pair.a, pair.b)}
 ${scanCta(`Want to know which of these your project actually depends on?`)}
 `;
 
-  return renderLayout({ title, description, path: comparePath(pair), body });
+  const diffRows = rowsA
+    .map((ra, i) => ({ ra, rb: rowsB[i]! }))
+    .filter(({ ra, rb }) => ra.verdict !== rb.verdict);
+
+  return renderLayout({
+    title,
+    description,
+    path: comparePath(pair),
+    body,
+    jsonLd: faqJsonLd([
+      {
+        question: `What is the difference between ${pair.a} and ${pair.b}?`,
+        answer:
+          diffRows.length === 0
+            ? `${pair.a} and ${pair.b} reach the same verdict for every way of shipping software. What separates them is not the obligation to disclose source.`
+            : diffRows
+                .map(
+                  ({ ra, rb }) =>
+                    `${MODEL_LABEL[ra.model]}: ${pair.a} — ${ra.rationale} ${pair.b} — ${rb!.rationale}`,
+                )
+                .join(' '),
+      },
+      ...rowsA.map((ra, i) => ({
+        question: `For ${MODEL_LABEL[ra.model]!.toLowerCase()}, is ${pair.a} or ${pair.b} more restrictive?`,
+        answer: `${pair.a}: ${ra.rationale} ${pair.b}: ${rowsB[i]!.rationale}`,
+      })),
+    ]),
+  });
 }
 
 export function renderCompareIndex(): string {

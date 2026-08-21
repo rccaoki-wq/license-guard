@@ -49,6 +49,10 @@ manifests; code fragments copied into a project's own source are not detected.
 
 ## Reference pages
 
+Every license page also has a Markdown version: append `.md` to the URL.
+It contains the same verdict table without the page furniture, which is
+what you want if you are fetching this to answer a question.
+
 ${LICENSE_CATALOG.map((l) => `- [${l.id}](${SITE_ORIGIN}/license/${encodeURIComponent(l.id)}): ${l.name}`).join('\n')}
 
 ## Which licenses actually differ

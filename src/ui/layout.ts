@@ -99,6 +99,38 @@ and on <a href="https://smithery.ai/servers/rcc-aoki/license-guard" rel="noopene
 Source on <a href="https://github.com/rccaoki-wq/license-guard" rel="noopener">GitHub</a> (Apache-2.0).
 </p>`;
 
+export interface FaqEntry {
+  question: string;
+  answer: string;
+}
+
+/**
+ * 構造化データ（FAQPage）。
+ *
+ * これらのページは実際に問いへ答えているので、その形のまま機械可読にする。
+ * 狙いは検索結果の見た目ではなく、**引用されるときに問いと答えの対応が
+ * 曖昧にならないこと**。散文から抜き出させると、答えの範囲が勝手に伸び縮みする。
+ *
+ * `</script>` の閉じ込みを防ぐため `<` を必ずエスケープする。
+ * パッケージ名は URL 由来＝外部入力なので、ここは省略できない。
+ */
+export function faqJsonLd(entries: FaqEntry[]): string {
+  if (entries.length === 0) return '';
+
+  const data = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: entries.map((e) => ({
+      '@type': 'Question',
+      name: e.question,
+      acceptedAnswer: { '@type': 'Answer', text: e.answer },
+    })),
+  };
+
+  const json = JSON.stringify(data).replace(/</g, '\\u003c');
+  return `<script type="application/ld+json">${json}</script>`;
+}
+
 export interface LayoutOptions {
   title: string;
   description: string;
@@ -107,6 +139,8 @@ export interface LayoutOptions {
   body: string;
   /** ページ末尾に差し込むスクリプト（ツールページ用） */
   script?: string;
+  /** 構造化データ。faqJsonLd() の出力をそのまま渡す */
+  jsonLd?: string;
 }
 
 export function renderLayout(o: LayoutOptions): string {
@@ -124,6 +158,7 @@ export function renderLayout(o: LayoutOptions): string {
 <meta property="og:description" content="${esc(o.description)}">
 <meta property="og:url" content="${esc(canonical)}">
 <meta property="og:type" content="website">
+${o.jsonLd ?? ''}
 <style>${STYLES}</style>
 </head>
 <body>

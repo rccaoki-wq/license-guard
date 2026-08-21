@@ -7,6 +7,7 @@ import { scan, withProvenanceNote } from './scan';
 import { LicenseCache } from './resolver/cache';
 import { LicenseResolver } from './resolver';
 import { findLicense } from './seo/catalog';
+import { renderLicenseResource } from './mcp/resources';
 import { buildRobotsTxt, buildSitemap, type SitemapPackage } from './seo/sitemap';
 import { buildLlmsTxt } from './seo/llms';
 import { handleMcpRequest } from './mcp/handler';
@@ -282,9 +283,32 @@ app.get('/compare/:slug', (c) => {
   return c.html(html, 200, { 'cache-control': SEO_CACHE });
 });
 
+// ライセンスページ。拡張子で形式を選ぶ。
+//
+// **経路を2本に分けない。** 当初 `/license/:id.md` を別ルートにしたところ、
+// Hono のパターンが `/license/MIT` にも一致し、HTML ページが Markdown を
+// 返すようになっていた。テストが無ければ本体を壊したまま公開していた。
+//
+// Markdown を出す理由は、AI に取得させるときに HTML から本文を抜き出させると
+// ナビゲーションや免責が混ざるため。MCP のリソースと同じ生成物を返すので、
+// 経路が増えても答えは1つのまま。
 app.get('/license/:id', (c) => {
-  const entry = findLicense(c.req.param('id'));
+  const raw = c.req.param('id');
+  const wantsMarkdown = raw.toLowerCase().endsWith('.md');
+  const id = wantsMarkdown ? raw.slice(0, -3) : raw;
+
+  const entry = findLicense(id);
   if (!entry) return c.notFound();
+
+  if (wantsMarkdown) {
+    const md = renderLicenseResource(entry.id);
+    if (md === null) return c.notFound();
+    return c.text(md, 200, {
+      'content-type': 'text/markdown; charset=utf-8',
+      'cache-control': SEO_CACHE,
+    });
+  }
+
   return c.html(renderLicensePage(entry), 200, { 'cache-control': SEO_CACHE });
 });
 
