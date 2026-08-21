@@ -50,13 +50,28 @@ curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guar
 
 いずれもフォームまたは GitHub 連携での申請です。
 
-| カタログ | 規模 | 備考 |
+| カタログ | 規模 | 状態 |
 |---|---|---|
-| [mcp.so](https://mcp.so) | 2万件超 | 掲載数が最大 |
-| [smithery.ai](https://smithery.ai) | 7千件超 | エコシステムの Docker Hub 的位置づけ |
-| [glama.ai/mcp](https://glama.ai/mcp) | — | 閲覧体験が良い |
-| [GitHub MCP Registry](https://github.com/mcp) | — | 単一の情報源を標榜 |
-| [punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | 9.2万スター | **PR提出済**: [#12523](https://github.com/punkpeye/awesome-mcp-servers/pull/12523)（Legal カテゴリ） |
+| [公式 MCP Registry](https://registry.modelcontextprotocol.io) | — | **登録済** `io.github.rccaoki-wq/license-guard` v1.0.0 active |
+| [glama.ai/mcp](https://glama.ai/mcp) | — | **登録済**（自動取り込み）。quality **A** / license **A** / maintenance B |
+| [punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | 9.2万スター | **PR提出済** [#12523](https://github.com/punkpeye/awesome-mcp-servers/pull/12523)（Legal） |
+| [mcp.so](https://mcp.so) | 2万件超 | **申請済** [chatmcp/mcpso#3658](https://github.com/chatmcp/mcpso/issues/3658)。**GitHub issue で申請する**（サイトのフォームではない）。タイトルは `[Submit] ...` |
+| [docker/mcp-registry](https://github.com/docker/mcp-registry) | Docker Desktop 同梱 | **PR提出済** [#4742](https://github.com/docker/mcp-registry/pull/4742) |
+| [PulseMCP](https://www.pulsemcp.com) | — | 申請不要。公式レジストリから自動取り込み（申請受付は停止中） |
+| [GitHub MCP Registry](https://github.com/mcp) | — | 申請不要。公式レジストリから自動取り込み |
+| [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) | 9万スター | **受付終了**。コミュニティ一覧は廃止され公式レジストリに一本化された |
+| [appcypher/awesome-mcp-servers](https://github.com/appcypher/awesome-mcp-servers) | 5.8千スター | **アーカイブ済**。PR も issue も受け付けない |
+| [wong2/awesome-mcp-servers](https://github.com/wong2/awesome-mcp-servers) | 4.3千スター | PR不可。[mcpservers.org/submit](https://mcpservers.org/submit) のフォーム（**ブラウザとメールアドレスが要る**） |
+| [smithery.ai](https://smithery.ai) | 7千件超 | 未登録。`smithery auth login`（ブラウザ認証）→ `smithery mcp publish <url> -n <org>/<name>` |
+
+### 未着手が残っている理由
+
+- **smithery / mcpservers.org**: ブラウザでの対話認証かフォーム入力が要る
+- **npm / GHCR / Docker Hub へのパッケージ公開**: 資格情報が要る（`gh` のトークンに `write:packages` が無い）。
+  公開できれば `server.json` に `packages`（`registryType: "oci"` 等）を足せて、
+  リモート専用でなく**どのクライアントからでも導入できる**状態になる
+- **GitHub Actions での自動公開**: `gh` のトークンに `workflow` スコープが無く、
+  `.github/workflows/` を push できない。`gh auth refresh -s workflow` で解消する
 
 ### Glama は申請不要（自動取り込み）
 
