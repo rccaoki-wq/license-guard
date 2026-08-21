@@ -64,6 +64,45 @@ curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guar
 | [wong2/awesome-mcp-servers](https://github.com/wong2/awesome-mcp-servers) | 4.3千スター | PR不可。[mcpservers.org/submit](https://mcpservers.org/submit) のフォーム（**ブラウザとメールアドレスが要る**） |
 | [smithery.ai](https://smithery.ai) | 7千件超 | **登録済** `rcc-aoki/license-guard`。スキャンは3ツールを検出。ただし掲載本文は空のまま（後述） |
 
+### Smithery の verified バッジは workers.dev では取れない
+
+検証条件は6つあり、うち1つが「**homepage のホスト名そのものに TXT レコード**」。
+
+```
+smithery-verification=<token>  を license-guard.rcc-aoki.workers.dev の TXT に
+```
+
+**これは設定できない。** `workers.dev` は Cloudflare 自身が持つゾーンで、
+割り当てられたサブドメインに DNS レコードを足す手段が無い。
+
+```
+rcc-aoki.workers.dev SOA = leland.ns.cloudflare.com
+workers.dev NS          = clyde.ns.cloudflare.com / sofia.ns.cloudflare.com
+```
+
+**独自ドメインに移すまで verified は取れない。** 移すなら、各カタログの掲載
+（公式レジストリ / Glama / Smithery / mcp.so / docker-registry / awesome）に
+URL が焼き付く前、つまり審査中の今が最も安い。
+
+他の条件の状況:
+
+| 条件 | 状態 |
+|---|---|
+| リリースが成功している | 済 |
+| quality score > 80 | **79**。description を入れて 55 → 79 まで上がった |
+| homepage が設定されている | 済 |
+| homepage ホストの TXT | **不可**（上記） |
+| Smithery へのリンク | 済。README とサイト全ページのフッタに設置 |
+| 有料の developer plan | 未（費用が要る） |
+
+- **Smithery の掲載メタデータは CLI から入れられない。** Settings > General の
+  Web フォームで入れる。CLI に渡せるのは `--config-schema` だけ
+- **`smithery.ai/badge/<ns>/<name>` は 500 を返す**（2026-08-21 時点）。
+  壊れた画像になるので貼らない。逆リンク条件はサーバーURLへの普通のリンクで満たせる
+- スキャンログは `%TEMP%\smithery-deploy-<id>.log` に出る。ここで
+  `Server info retrieved. name: ..., version: ...` が見えるので、
+  **本番の再デプロイ忘れがここで発覚する**（実際に 1.0.0 のままだと分かった）
+
 ### 残っているもの
 
 - **mcpservers.org（wong2 系）**: フォームにブラウザとメールアドレスが要る
