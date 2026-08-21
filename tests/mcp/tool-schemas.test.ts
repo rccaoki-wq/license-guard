@@ -6,7 +6,12 @@
  * 返しているのに向こうで壊れる。手で書いた JSON Schema は必ずずれるので、
  * 実際の出力を当てて固定する。
  *
- * ajv は wrangler 経由で既に入っている（追加依存にしない）。
+ * ajv は devDependencies に**明示的に**入れてある。当初は
+ * `@modelcontextprotocol/sdk` の推移的依存を借りていたが、それは
+ * 「宣言していない依存に頼る」ことに他ならない。SDK が ajv を落とした日に、
+ * このテストが「モジュールが見つからない」という無関係な顔で落ちる。
+ *
+ * ライセンスと依存関係を扱う道具が、自分の依存を宣言しないのは筋が通らない。
  */
 import Ajv from 'ajv';
 import { describe, expect, it } from 'vitest';

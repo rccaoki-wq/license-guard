@@ -261,4 +261,71 @@ describe('ホスト版とローカル版が一致する', () => {
     const l: any = await local({ jsonrpc: '2.0', id: 1, method: 'prompts/get', params });
     expect(l.result).toEqual(h.result);
   });
+
+  it('resources/templates/list が同じ（どちらも空で答える）', async () => {
+    const h = await rpc({ jsonrpc: '2.0', id: 1, method: 'resources/templates/list' });
+    const l: any = await local({ jsonrpc: '2.0', id: 1, method: 'resources/templates/list' });
+    expect(l.result).toEqual(h.result);
+    expect(l.result.resourceTemplates).toEqual([]);
+  });
+
+  // 正常系だけ揃えても、壊れ方が揃っていなければ経路の違いが表に出る。
+  // 「ホスト版では -32602、ローカル版では例外」のような食い違いは、
+  // 利用者から見れば同じ製品が場所によって違うふるまいをすることになる。
+  it('未知リソースの拒否が同じ', async () => {
+    const params = { uri: 'licenseguard://license/NOPE' };
+    const h = await rpc({ jsonrpc: '2.0', id: 1, method: 'resources/read', params });
+    const l: any = await local({ jsonrpc: '2.0', id: 1, method: 'resources/read', params });
+    expect(l.error).toEqual(h.error);
+    expect(l.error.code).toBe(-32602);
+  });
+
+  it('スキーム違いの URI の拒否が同じ', async () => {
+    const params = { uri: 'https://example.com/MIT' };
+    const h = await rpc({ jsonrpc: '2.0', id: 1, method: 'resources/read', params });
+    const l: any = await local({ jsonrpc: '2.0', id: 1, method: 'resources/read', params });
+    expect(l.error).toEqual(h.error);
+  });
+
+  it('uri 欠落の拒否が同じ', async () => {
+    const h = await rpc({ jsonrpc: '2.0', id: 1, method: 'resources/read', params: {} });
+    const l: any = await local({ jsonrpc: '2.0', id: 1, method: 'resources/read', params: {} });
+    expect(l.error).toEqual(h.error);
+  });
+
+  it('未知プロンプトの拒否が同じ', async () => {
+    const params = { name: 'no-such-prompt' };
+    const h = await rpc({ jsonrpc: '2.0', id: 1, method: 'prompts/get', params });
+    const l: any = await local({ jsonrpc: '2.0', id: 1, method: 'prompts/get', params });
+    expect(l.error).toEqual(h.error);
+    expect(l.error.code).toBe(-32602);
+  });
+
+  it('引数なしのプロンプト取得が同じ（落ちない）', async () => {
+    const params = { name: 'audit_project' };
+    const h = await rpc({ jsonrpc: '2.0', id: 1, method: 'prompts/get', params });
+    const l: any = await local({ jsonrpc: '2.0', id: 1, method: 'prompts/get', params });
+    expect(l.result).toEqual(h.result);
+  });
+
+  it('未知ツールの拒否が同じ', async () => {
+    const params = { name: 'no_such_tool', arguments: {} };
+    const h = await rpc({ jsonrpc: '2.0', id: 1, method: 'tools/call', params });
+    const l: any = await local({ jsonrpc: '2.0', id: 1, method: 'tools/call', params });
+    expect(l.error).toEqual(h.error);
+  });
+
+  it('ツール名が文字列でない場合の拒否が同じ', async () => {
+    const params = { name: 42, arguments: {} };
+    const h = await rpc({ jsonrpc: '2.0', id: 1, method: 'tools/call', params });
+    const l: any = await local({ jsonrpc: '2.0', id: 1, method: 'tools/call', params });
+    expect(l.error).toEqual(h.error);
+  });
+
+  it('未知メソッドの拒否が同じ', async () => {
+    const h = await rpc({ jsonrpc: '2.0', id: 1, method: 'no/such/method' });
+    const l: any = await local({ jsonrpc: '2.0', id: 1, method: 'no/such/method' });
+    expect(l.error).toEqual(h.error);
+    expect(l.error.code).toBe(-32601);
+  });
 });
