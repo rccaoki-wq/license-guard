@@ -62,16 +62,36 @@ curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guar
 | [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) | 9万スター | **受付終了**。コミュニティ一覧は廃止され公式レジストリに一本化された |
 | [appcypher/awesome-mcp-servers](https://github.com/appcypher/awesome-mcp-servers) | 5.8千スター | **アーカイブ済**。PR も issue も受け付けない |
 | [wong2/awesome-mcp-servers](https://github.com/wong2/awesome-mcp-servers) | 4.3千スター | PR不可。[mcpservers.org/submit](https://mcpservers.org/submit) のフォーム（**ブラウザとメールアドレスが要る**） |
-| [smithery.ai](https://smithery.ai) | 7千件超 | 未登録。`smithery auth login`（ブラウザ認証）→ `smithery mcp publish <url> -n <org>/<name>` |
+| [smithery.ai](https://smithery.ai) | 7千件超 | **登録済** `rcc-aoki/license-guard`。スキャンは3ツールを検出。ただし掲載本文は空のまま（後述） |
 
-### 未着手が残っている理由
+### 残っているもの
 
-- **smithery / mcpservers.org**: ブラウザでの対話認証かフォーム入力が要る
-- **npm / GHCR / Docker Hub へのパッケージ公開**: 資格情報が要る（`gh` のトークンに `write:packages` が無い）。
-  公開できれば `server.json` に `packages`（`registryType: "oci"` 等）を足せて、
-  リモート専用でなく**どのクライアントからでも導入できる**状態になる
-- **GitHub Actions での自動公開**: `gh` のトークンに `workflow` スコープが無く、
-  `.github/workflows/` を push できない。`gh auth refresh -s workflow` で解消する
+- **mcpservers.org（wong2 系）**: フォームにブラウザとメールアドレスが要る
+- **Smithery の掲載本文**: CLI にメタデータを渡す口が無い（`--config-schema` のみ）。
+  スキャンログ上は `Capabilities found: 3 tools` まで通っているのに、掲載ページの
+  description / repository / tools が空。Web UI 側の設定項目と思われる
+
+## パッケージ公開（GHCR）
+
+`.github/workflows/publish.yml` がリリース時に自動で行う。
+
+- **`mcp-publisher login github-oidc` を使う**。ブラウザのデバイスフローも保存トークンも要らない。
+  以前は「JWT の期限が短いので作業を挟むな」という運用でしのいでいたが、OIDC ならその問題自体が消える
+- **イメージは push 前に起動して確かめる**。`initialize` と `tools/list` を実際に流し、
+  ツールが3件あることまで見てから push する
+- **公式レジストリは OCI パッケージに所有権の証明を要求する。**
+  Dockerfile に `LABEL io.modelcontextprotocol.server.name="io.github.<owner>/<name>"` が要る。
+  無いと publish が 400 で拒否される（他人の公開イメージを自分のサーバー記録に結び付けられないため）
+- **イメージは public でなければならない。** private だと検証が 401/403 で落ちる
+- **`packages[]` の OCI エントリに `registryBaseUrl` と `version` を書いてはいけない。**
+  どちらも 400 になる。版は `identifier` のタグで示す（`ghcr.io/owner/name:1.1.0`）。
+  2回連続で弾かれてから気づいた
+- 同じ版を publish し直すと 400 になるので、ワークフロー側で公開済みなら飛ばしている
+
+### 必要だったスコープ
+
+`gh auth refresh -h github.com -s workflow,write:packages`。
+`workflow` が無いと `.github/workflows/` を push できず、`write:packages` が無いと GHCR に出せない。
 
 ### Glama は申請不要（自動取り込み）
 

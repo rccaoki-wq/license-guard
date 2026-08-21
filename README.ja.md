@@ -34,9 +34,12 @@ claude mcp add licenseguard --transport http https://license-guard.rcc-aoki.work
 ローカル版（マニフェストを手元から出さない）:
 
 ```bash
-docker build -t licenseguard .
-claude mcp add licenseguard -- docker run -i --rm licenseguard
+claude mcp add licenseguard -- docker run -i --rm ghcr.io/rccaoki-wq/license-guard:1.1.0
 ```
+
+イメージはリリースごとに公開され、公式 MCP レジストリに OCI パッケージとして宣言してある。
+レジストリを読むクライアントなら、この手順すら要らずに導入できる。
+自分でビルドする場合は `docker build -t licenseguard . && docker run -i --rm licenseguard`。
 
 **判定エンジンは両者で同一です。** 違うのは経路だけで、答えが食い違うことはありません
 （`npm run e2e:stdio` で固定しています）。

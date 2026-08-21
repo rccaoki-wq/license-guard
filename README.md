@@ -41,9 +41,10 @@ claude mcp add licenseguard --transport http https://license-guard.rcc-aoki.work
 **Local (stdio)** — your manifest never leaves your machine. Only package names and versions are sent to public registries to look up licenses:
 
 ```bash
-docker build -t licenseguard .
-claude mcp add licenseguard -- docker run -i --rm licenseguard
+claude mcp add licenseguard -- docker run -i --rm ghcr.io/rccaoki-wq/license-guard:1.1.0
 ```
+
+The image is published on every release and declared as an OCI package in the official MCP registry, so clients that read the registry can install it without any of this. To build it yourself instead: `docker build -t licenseguard . && docker run -i --rm licenseguard`.
 
 Both paths run **the same policy engine**. They cannot disagree — an end-to-end suite (`npm run e2e:stdio`) pins them together.
 
