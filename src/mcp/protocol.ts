@@ -8,7 +8,7 @@
 export const SERVER_INFO = {
   name: 'licenseguard',
   title: 'LicenseGuard',
-  version: '1.0.0',
+  version: '1.1.0',
 } as const;
 
 /** 出荷済みの MCP プロトコルバージョン。ここに無いものは 400 を返す */

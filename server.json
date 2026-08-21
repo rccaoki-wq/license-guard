@@ -3,7 +3,7 @@
   "name": "io.github.rccaoki-wq/license-guard",
   "title": "LicenseGuard",
   "description": "Check if a dependency's license obligates you, based on how you ship. npm, PyPI, Go.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "websiteUrl": "https://license-guard.rcc-aoki.workers.dev",
   "repository": {
     "url": "https://github.com/rccaoki-wq/license-guard",
@@ -13,6 +13,17 @@
     {
       "type": "streamable-http",
       "url": "https://license-guard.rcc-aoki.workers.dev/mcp"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "oci",
+      "registryBaseUrl": "https://ghcr.io",
+      "identifier": "ghcr.io/rccaoki-wq/license-guard:1.1.0",
+      "version": "1.1.0",
+      "transport": {
+        "type": "stdio"
+      }
     }
   ]
 }

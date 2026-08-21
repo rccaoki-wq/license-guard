@@ -25,6 +25,15 @@ RUN npx --yes esbuild src/local/stdio.ts \
 FROM node:22-alpine
 WORKDIR /app
 
+# 公式 MCP レジストリはこのラベルだけを OCI パッケージの所有権証明として使う。
+# 無い・値が違うと publish が拒否される（登録者が自分の管理外の公開イメージを
+# 自分のサーバー記録に結び付けられないようにするため）。
+LABEL io.modelcontextprotocol.server.name="io.github.rccaoki-wq/license-guard"
+
+LABEL org.opencontainers.image.source="https://github.com/rccaoki-wq/license-guard"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.description="Decides whether an open source dependency's license obligates you, given how you ship."
+
 # 根拠を残す。ライセンスを扱う道具が自分のライセンスを同梱しないのは筋が通らない
 COPY --from=build /app/dist/stdio.mjs ./stdio.mjs
 COPY LICENSE NOTICE ./
