@@ -1,6 +1,6 @@
 // アクセシビリティ。公開する Web ツールとして最低限の水準を満たすか。
 import { chromium } from 'playwright';
-import { SYNTHETIC_HEADERS } from './synthetic.mjs';
+import { markSyntheticFor } from './synthetic.mjs';
 
 const BASE = process.env.BASE || 'https://license-guard.rcc-aoki.workers.dev';
 let fail = 0;
@@ -10,7 +10,9 @@ const check = (n, ok, d = '') => {
 };
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ extraHTTPHeaders: SYNTHETIC_HEADERS });
+const page = await browser.newPage();
+// 自分のオリジン宛だけに印を付ける（全リクエストに付けると第三者リソースを壊す）
+await markSyntheticFor(page, BASE);
 
 for (const path of ['/', '/licenses', '/license/MIT', '/pkg/npm/express']) {
   console.log(`\n--- ${path} ---`);

@@ -1,12 +1,14 @@
 // 関心表明の受け付け。Phase 0 の測定はここが機能して初めて意味を持つ。
 import { chromium } from 'playwright';
-import { SYNTHETIC_HEADERS } from './synthetic.mjs';
+import { markSyntheticFor } from './synthetic.mjs';
 const B = process.env.BASE || 'https://license-guard.rcc-aoki.workers.dev';
 let fail = 0;
 const check = (n, ok, d = '') => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${n}${d ? ' — ' + d : ''}`); if (!ok) fail++; };
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ extraHTTPHeaders: SYNTHETIC_HEADERS });
+const page = await browser.newPage();
+// 自分のオリジン宛だけに印を付ける（全リクエストに付けると第三者リソースを壊す）
+await markSyntheticFor(page, B);
 await page.goto(B, { waitUntil: 'domcontentloaded' });
 
 await page.fill('#content', 'pyload-ng\n');

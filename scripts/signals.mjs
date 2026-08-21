@@ -8,7 +8,7 @@
  *
  * 除外するもの:
  *   1. synthetic = 1        自分の検証トラフィック（E2E が印を付けている）
- *   2. 巡回ボット            クライアント名で判定（下の PROBE_PATTERNS）
+ *   2. 巡回ボット            名前の癖に加え、**ツールを一度も呼ばなかったセッション**
  *   3. synthetic IS NULL     計測を入れる前の行。帰属不能なので数えない
  *
  * 使い方:  npm run signals
@@ -54,9 +54,22 @@ const PROBE_PATTERNS = [
   /grader/i, /grade/i, /census/i, /inspector/i, /monitor/i, /catalog/i,
   /index/i, /observatory/i, /health/i, /verify/i, /spike/i, /benchmark/i,
   /marketplace/i, /directory/i, /search/i, /glama/i, /lobehub/i, /e2e/i, /test/i,
+  /beat/i, /connect/i, /\bcomp\b/i, /extractor/i, /smithery/i, /check/i,
 ];
 
-const isProbe = (name) => !name || PROBE_PATTERNS.some((re) => re.test(name));
+const nameLooksLikeProbe = (name) => !name || PROBE_PATTERNS.some((re) => re.test(name));
+
+/**
+ * **接続しただけの相手は利用者ではない。**
+ *
+ * 名前で弾く方式だけでは追いつかない。初日に来たクライアント名は 33 種、
+ * 翌日にはさらに増え、毎回新しい名前が現れる。名簿の保守はいずれ破綻する。
+ *
+ * ふるまいで見れば名前に依存しない。initialize だけしてツールを一度も
+ * 呼ばずに去るのは、名前が何であれ生存確認か棚卸しであって、需要ではない。
+ * 名前による判定はその補助として残す（ツールを呼んだ巡回ボットも実在しうる）。
+ */
+const isProbe = (s) => nameLooksLikeProbe(s.client) || s.calls === 0;
 
 const pct = (a, b) => (b === 0 ? '—' : ((a / b) * 100).toFixed(1) + '%');
 const h = (s) => console.log('\n' + s + '\n' + '─'.repeat(s.length));
@@ -88,18 +101,18 @@ const sessions = q(
   "SELECT e.session_id sid, MAX(i.client_name) client, SUM(CASE WHEN e.event='tool_call' THEN 1 ELSE 0 END) calls, MIN(e.created_at) first_seen, MAX(e.created_at) last_seen FROM mcp_events e LEFT JOIN mcp_events i ON i.session_id = e.session_id AND i.event='initialize' WHERE e.synthetic = 0 AND e.session_id IS NOT NULL GROUP BY e.session_id",
 );
 
-const real = sessions.filter((s) => !isProbe(s.client));
-const probes = sessions.filter((s) => isProbe(s.client));
+const real = sessions.filter((s) => !isProbe(s));
+const namedProbes = sessions.filter((s) => nameLooksLikeProbe(s.client));
+const silent = sessions.filter((s) => !nameLooksLikeProbe(s.client) && s.calls === 0);
 
 console.log(`セッション総数         ${sessions.length}`);
-console.log(`  巡回ボット等         ${probes.length}`);
-console.log(`  実利用と見なせるもの ${real.length}`);
+console.log(`  巡回ボット等（名前）  ${namedProbes.length}`);
+console.log(`  接続のみで何もせず   ${silent.length}   ← 名前は不明だがツール未使用`);
+console.log(`  実利用               ${real.length}   ← ツールを1回以上呼んだ`);
 
-const withCalls = real.filter((s) => s.calls > 0);
 const repeat = real.filter((s) => s.calls >= 2);
 
-console.log(`\nツールを1回でも呼んだ   ${withCalls.length}`);
-console.log(`2回以上呼んだ（継続）   ${repeat.length}   ← Phase 0 の本命指標`);
+console.log(`\n2回以上呼んだ（継続）   ${repeat.length}   ← Phase 0 の本命指標`);
 console.log(`呼び出し総数            ${real.reduce((a, s) => a + s.calls, 0)}`);
 
 if (real.length > 0) {
@@ -161,7 +174,7 @@ if (leadNull.n > 0) console.log(`\n帰属不能（計測前）     ${leadNull.n}
 
 h('Phase 0 の判断');
 
-if (scanned < 30 && withCalls.length < 30) {
+if (scanned < 30 && real.length < 30) {
   console.log('判断できません。標本が足りません。');
   console.log('判定完了セッションかツール利用セッションが 30 を超えるまでは、');
   console.log('比率を読んでも偶然と区別できません。');

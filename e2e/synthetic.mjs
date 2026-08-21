@@ -14,3 +14,24 @@ export const SYNTHETIC_HEADERS = { 'x-licenseguard-synthetic': '1' };
 export function withSynthetic(init = {}) {
   return { ...init, headers: { ...SYNTHETIC_HEADERS, ...(init.headers || {}) } };
 }
+
+/**
+ * ブラウザ用。**自分のオリジン宛のリクエストにだけ**印を付ける。
+ *
+ * Playwright の `extraHTTPHeaders` はコンテキストの全リクエストに適用される。
+ * 当初それを使ったところ、Cloudflare Web Analytics のビーコン取得にまで
+ * 独自ヘッダが乗り、プリフライトが CORS で弾かれてコンソールエラーになった。
+ *
+ * 2 つの意味で間違っていた。無関係な第三者リソースを壊すこと、そして
+ * **自分の独自ヘッダを第三者に送ってしまうこと。**
+ */
+export async function markSyntheticFor(page, origin) {
+  await page.route('**/*', async (route) => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) {
+      await route.continue({ headers: { ...route.request().headers(), ...SYNTHETIC_HEADERS } });
+    } else {
+      await route.continue();
+    }
+  });
+}
