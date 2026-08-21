@@ -59,6 +59,25 @@ function str(v: unknown): string | undefined {
 // ツール定義
 // ---------------------------------------------------------------------------
 
+const VERDICTS = ['allowed', 'review', 'blocked'] as const;
+
+/**
+ * 3 ツールに共通のふるまい。
+ *
+ * これを宣言する意味は、エージェントが**確認を挟まずに呼んでよいかを判断できる**こと。
+ * どれも読み取りだけで、何も書かず、同じ引数なら同じ答えを返す。
+ * 依存を追加する直前に呼ばせたい道具が、呼ぶたびに承認を求められては使われない。
+ *
+ * openWorld を true にしているのは、答えが外部レジストリの状態に依存するため。
+ * 再ライセンスは実在するので、閉じた世界だと偽ることはできない。
+ */
+const READ_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+} as const;
+
 export const TOOL_DEFINITIONS = [
   {
     name: 'check_dependency_license',
@@ -108,6 +127,7 @@ export const TOOL_DEFINITIONS = [
       },
       required: ['license', 'verdict', 'obligations', 'rationale'],
     },
+    annotations: READ_ONLY,
   },
   {
     name: 'check_manifest_licenses',
@@ -130,6 +150,55 @@ export const TOOL_DEFINITIONS = [
       },
       required: ['content', 'distribution_model'],
     },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        ecosystem: { type: 'string' },
+        distributionModel: { type: 'string' },
+        summary: {
+          type: 'object',
+          description:
+            'Counts by verdict. total is every dependency found, not only the ones that were resolved.',
+          properties: {
+            total: { type: 'number' },
+            allowed: { type: 'number' },
+            review: { type: 'number' },
+            blocked: { type: 'number' },
+          },
+          required: ['total', 'allowed', 'review', 'blocked'],
+        },
+        findings: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              ecosystem: { type: 'string' },
+              name: { type: 'string' },
+              version: { type: ['string', 'null'] },
+              scope: { type: 'string', enum: SCOPES },
+              spdxExpression: { type: ['string', 'null'] },
+              resolvedFrom: {
+                type: 'string',
+                description:
+                  'Where the license came from. "lockfile" is exact; "registry-latest" means the pinned version could not be read and the latest release was used instead; "not-checked" means the lookup budget ran out and this dependency was never resolved.',
+              },
+              verdict: { type: 'string', enum: VERDICTS },
+              obligations: { type: 'array', items: { type: 'string' } },
+              rationale: { type: 'string' },
+            },
+            required: ['ecosystem', 'name', 'scope', 'verdict', 'obligations', 'rationale'],
+          },
+        },
+        limitations: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'What this scan could not establish. Never empty when anything was left unresolved. Read it before treating a result as clean.',
+        },
+      },
+      required: ['summary', 'findings', 'limitations'],
+    },
+    annotations: READ_ONLY,
   },
   {
     name: 'explain_license',
@@ -153,6 +222,39 @@ export const TOOL_DEFINITIONS = [
       },
       required: ['license'],
     },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        license: { type: 'string' },
+        linkage: { type: 'string' },
+        byDistributionModel: {
+          type: 'array',
+          description: 'One row per way of shipping. This is where the same license diverges.',
+          items: {
+            type: 'object',
+            properties: {
+              model: { type: 'string', enum: MODELS },
+              verdict: { type: 'string', enum: VERDICTS },
+              obligations: { type: 'array', items: { type: 'string' } },
+              rationale: { type: 'string' },
+            },
+            required: ['model', 'verdict', 'obligations', 'rationale'],
+          },
+        },
+        devScope: {
+          type: 'object',
+          description:
+            'The result when the dependency never reaches users (dev, build or test scope). Independent of the shipping model.',
+          properties: {
+            verdict: { type: 'string', enum: VERDICTS },
+            rationale: { type: 'string' },
+          },
+          required: ['verdict', 'rationale'],
+        },
+      },
+      required: ['license', 'byDistributionModel', 'devScope'],
+    },
+    annotations: READ_ONLY,
   },
 ] as const;
 
