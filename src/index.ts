@@ -15,6 +15,7 @@ import { isPlausibleEmail, normalizeEmail } from './interest';
 import { evaluateExpression } from './policy/engine';
 import { packagePath } from './ui/pkg';
 import { SITE_ORIGIN } from './ui/layout';
+import { FAVICON_SVG } from './ui/favicon';
 import type { DistributionModel, Ecosystem, Linkage, Scope } from './types';
 
 type Env = {
@@ -107,6 +108,14 @@ app.get('/healthz', (c) =>
 
 app.get('/robots.txt', (c) =>
   c.text(buildRobotsTxt(), 200, { 'cache-control': SEO_CACHE }),
+);
+
+// カタログ（Docker Desktop / Glama / mcp.so）はアイコン URL を直接参照する
+app.get('/favicon.svg', (c) =>
+  c.body(FAVICON_SVG, 200, {
+    'content-type': 'image/svg+xml',
+    'cache-control': 'public, max-age=86400, s-maxage=604800',
+  }),
 );
 
 app.get('/llms.txt', (c) =>
