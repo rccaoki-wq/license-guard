@@ -98,9 +98,35 @@ jobs:
             | tar xz mcp-publisher
           chmod +x mcp-publisher
 
+      # 同じ版を publish し直すと 400 になる。リリースを打ち直したときや
+      # イメージだけ作り直したときに、ここで落とす理由はない。
+      - name: すでに公開済みの版かどうかを見る
+        id: check
+        run: |
+          want=$(node -p "require('./server.json').version")
+          have=$(curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guard" \
+            | node -e '
+              let s = "";
+              process.stdin.on("data", (d) => (s += d)).on("end", () => {
+                const servers = JSON.parse(s).servers ?? [];
+                const latest = servers.find(
+                  (e) => e._meta?.["io.modelcontextprotocol.registry/official"]?.isLatest,
+                );
+                console.log((latest?.server ?? latest)?.version ?? "");
+              });
+            ')
+          echo "want=$want have=$have"
+          if [ "$want" = "$have" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::server.json の版 $want はすでに公開済み。publish を飛ばす"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # OIDC。ブラウザのデバイスフローも保存トークンも使わない。
       # 名前空間 io.github.<owner> の所有権はワークフローの発行元で証明される。
       - name: 認証して publish する
+        if: steps.check.outputs.skip == 'false'
         run: |
           ./mcp-publisher login github-oidc
           ./mcp-publisher publish
