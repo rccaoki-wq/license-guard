@@ -1,0 +1,120 @@
+# リリースを打つと、コンテナイメージと公式 MCP レジストリの両方が更新される。
+#
+# 手で publish していた頃の問題:
+#   - mcp-publisher の認証がデバイスフローで、ブラウザ操作が要った
+#   - login から publish まで間を空けると JWT が切れて 401 になった
+#   - リリースのたびに人が覚えていないと版がずれる
+#
+# ここでは GitHub OIDC で認証する。ブラウザも保存トークンも要らない。
+name: publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      publish_registry:
+        description: 公式 MCP レジストリにも publish する
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+  # mcp-publisher が OIDC で身元を証明するために要る
+  id-token: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 出荷前に検証する
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      # ローカルの Docker が落ちていても壊れないよう、実際にビルドして起動を確かめる。
+      # Glama がビルドに成功しても、それは Glama が生成した Dockerfile であって
+      # このリポジトリの Dockerfile の検証にはならない。
+      - name: イメージをビルドする
+        run: docker build -t licenseguard:ci .
+
+      - name: 起動して MCP として応答するか確かめる
+        run: |
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            > /tmp/in.jsonl
+          docker run -i --rm licenseguard:ci < /tmp/in.jsonl > /tmp/out.jsonl
+          node -e '
+            const fs = require("fs");
+            const lines = fs.readFileSync("/tmp/out.jsonl", "utf8").split("\n").filter(Boolean);
+            const byId = Object.fromEntries(lines.map((l) => JSON.parse(l)).map((m) => [m.id, m]));
+            if (byId[1]?.result?.serverInfo?.name !== "licenseguard") throw new Error("initialize failed");
+            const tools = byId[2]?.result?.tools?.map((t) => t.name) ?? [];
+            if (tools.length !== 3) throw new Error("expected 3 tools, got " + tools.join(","));
+            console.log("container OK:", tools.join(", "));
+          '
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: タグを決める
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            v="${{ github.event.release.tag_name }}"
+            echo "version=${v#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: push する
+        run: |
+          docker tag licenseguard:ci "$IMAGE:${{ steps.tag.outputs.version }}"
+          docker tag licenseguard:ci "$IMAGE:latest"
+          docker push "$IMAGE:${{ steps.tag.outputs.version }}"
+          docker push "$IMAGE:latest"
+
+  registry:
+    needs: image
+    if: github.event_name == 'release' || inputs.publish_registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: mcp-publisher を入れる
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+          chmod +x mcp-publisher
+
+      # OIDC。ブラウザのデバイスフローも保存トークンも使わない。
+      # 名前空間 io.github.<owner> の所有権はワークフローの発行元で証明される。
+      - name: 認証して publish する
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
+
+      - name: 反映を確かめる
+        run: |
+          sleep 10
+          curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guard" \
+            | node -e '
+              let s = "";
+              process.stdin.on("data", (d) => (s += d)).on("end", () => {
+                const servers = JSON.parse(s).servers ?? [];
+                const hit = servers.find((x) => (x.name ?? x.server?.name) === "io.github.rccaoki-wq/license-guard");
+                if (!hit) throw new Error("not found in registry after publish");
+                console.log("registry OK:", JSON.stringify(hit).slice(0, 300));
+              });
+            '
