@@ -159,6 +159,8 @@ The session identifier is issued as the spec's `Mcp-Session-Id` header. It is a 
 
 If that is still more than your organization wants to share, run the local stdio server. It sends nothing but package names and versions, and only to the public registries that already publish them.
 
+One thing worth stating plainly rather than leaving for someone to discover: the hosted site's **HTML pages** carry Cloudflare Web Analytics, because the zone it now sits on has it enabled. It is cookieless and aggregate, but it is a third-party script and it was not there before the domain moved. It is injected only into HTML — `/mcp`, `/api/*`, `/llms.txt` and `/sitemap.xml` are untouched, so agents and API callers never load it.
+
 ## Disclaimer
 
 LicenseGuard provides **information** derived from published license texts and declared dependency metadata. It is not legal advice, and using it does not create an attorney-client relationship. Verdicts rest on the license information a package declares; they do not claim to identify every obligation or violation.
