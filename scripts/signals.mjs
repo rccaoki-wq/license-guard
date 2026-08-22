@@ -160,10 +160,15 @@ if (orphan.n > 0) {
 
 h('Web ツール: 実利用');
 
+// 種別で分ける。到達したのが人かボットかで打ち手が正反対になる。
+// unknown は人間に数えない（迷ったら過小評価に倒す）。
 const web = q(
-  "SELECT name, COUNT(DISTINCT session_id) sessions FROM events WHERE synthetic = 0 GROUP BY name",
+  "SELECT name, client_kind kind, COUNT(DISTINCT session_id) sessions FROM events WHERE synthetic = 0 GROUP BY name, client_kind",
 );
-const get = (n) => web.find((r) => r.name === n)?.sessions ?? 0;
+
+const byKind = (n, kinds) =>
+  web.filter((r) => r.name === n && kinds.includes(r.kind)).reduce((a, r) => a + r.sessions, 0);
+const get = (n) => web.filter((r) => r.name === n).reduce((a, r) => a + r.sessions, 0);
 
 const landed = get('landed');
 const examples = get('example_loaded');
@@ -174,16 +179,32 @@ const emailed = get('cta_email_submitted');
 
 // 到達を測る前は「誰も来ていない」と「来たが何もせず帰った」を区別できず、
 // 流入を作るべきか入口を直すべきか判断できなかった。段ごとの脱落を見る。
+const humans = byKind('landed', ['browser']);
+const bots = byKind('landed', ['bot']);
+const unknownKind = byKind('landed', ['unknown']);
+const preKind = byKind('landed', [null]);
+
 console.log(`到達                   ${landed}`);
+console.log(`  ブラウザ             ${humans}   ← 人間とみなせるのはこれだけ`);
+console.log(`  ボット               ${bots}`);
+console.log(`  判別できず           ${unknownKind}   ← 人間には数えない`);
+if (preKind > 0) console.log(`  種別の計測前         ${preKind}`);
 console.log(`  例を試した           ${examples}   (${pct(examples, landed)})`);
 console.log(`  自分で貼った         ${submitted}   (${pct(submitted, landed)})`);
 console.log(`判定完了               ${scanned}   (${pct(scanned, landed)})`);
 console.log(`CTA クリック           ${clicked}   (${pct(clicked, scanned)})`);
 console.log(`連絡先を残した         ${emailed}   (${pct(emailed, scanned)})`);
 
-if (landed > 0 && scanned === 0) {
-  console.log('\n到達はあるが判定まで進んでいない。流入ではなく入口の問題。');
-} else if (landed === 0) {
+// 到達の総数ではなく、**人間とみなせる到達**で診断する。
+// ボットや判別不能を数えると「入口が悪い」と誤診し、流入が要る段階で
+// 入口をいじり続けることになる。
+if (humans > 0 && scanned === 0) {
+  console.log('\n人間が到達しているのに判定まで進んでいない。入口の問題。');
+} else if (humans > 0) {
+  console.log(`\n人間の到達 ${humans} 件のうち ${scanned} 件が判定まで到達。`);
+} else if (landed > 0) {
+  console.log('\n到達はあるが、人間とみなせるものは 0。まだ流入の段階。');
+} else {
   console.log('\n到達が 0。入口を直しても意味がない。流入を作る段階。');
 }
 

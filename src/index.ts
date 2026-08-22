@@ -14,6 +14,7 @@ import { handleMcpRequest } from './mcp/handler';
 import { createD1Recorder, isSyntheticRequest } from './mcp/telemetry';
 import { enforceRateLimit, type RateLimitBinding } from './ratelimit';
 import { isPlausibleEmail, normalizeEmail } from './interest';
+import { classifyClient } from './client-kind';
 import { evaluateExpression } from './policy/engine';
 import { packagePath } from './ui/pkg';
 import { SITE_ORIGIN } from './ui/layout';
@@ -472,13 +473,15 @@ app.post('/api/track', async (c) => {
 
     if (typeof name === 'string' && TRACKED_EVENTS.has(name) && typeof sessionId === 'string') {
       await c.env.DB.prepare(
-        'INSERT INTO events (name, session_id, payload, synthetic, created_at) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO events (name, session_id, payload, synthetic, client_kind, created_at) VALUES (?, ?, ?, ?, ?, ?)',
       )
         .bind(
           name,
           sessionId.slice(0, 64),
           null,
           isSyntheticRequest(c.req.raw.headers) ? 1 : 0,
+          // 生の User-Agent は保存しない。bot/browser/unknown の別だけ
+          classifyClient(c.req.header('user-agent')),
           Date.now(),
         )
         .run();
