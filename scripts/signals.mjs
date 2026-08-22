@@ -16,6 +16,13 @@
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+// 判断は verdict.mjs に置いてテストしてある。ここは取得と表示だけ
+import {
+  classifySessions,
+  diagnoseWeb,
+  nameLooksLikeProbe,
+  phaseVerdict,
+} from './verdict.mjs';
 
 // wrangler の package.json は exports に含まれるが bin/ は含まれない。
 // パッケージの場所を起点に組み立てる。
@@ -41,49 +48,6 @@ function q(sql) {
   if (start < 0) throw new Error('unexpected wrangler output: ' + out.slice(0, 300));
   return JSON.parse(out.slice(start))[0].results;
 }
-
-/**
- * 巡回ボット・採点サービスの判別。
- *
- * 完全な名簿は作れない（毎日新しいものが現れる）ので、名前の癖で拾う。
- * 取りこぼしたものは「実利用」に混ざるため、判定は**厳しめに倒す**。
- * 実需要を過大評価するより過小評価するほうが、判断を誤りにくい。
- */
-const PROBE_PATTERNS = [
-  /probe/i, /crawler/i, /\bbot\b/i, /scanner/i, /scan\b/i, /registry/i,
-  /grader/i, /grade/i, /census/i, /inspector/i, /monitor/i, /catalog/i,
-  /index/i, /observatory/i, /health/i, /verify/i, /spike/i, /benchmark/i,
-  /marketplace/i, /directory/i, /search/i, /glama/i, /lobehub/i, /e2e/i, /test/i,
-  /beat/i, /connect/i, /\bcomp\b/i, /extractor/i, /smithery/i, /check/i,
-];
-
-const nameLooksLikeProbe = (name) => !name || PROBE_PATTERNS.some((re) => re.test(name));
-
-/**
- * **接続しただけの相手は利用者ではない。**
- *
- * 名前で弾く方式だけでは追いつかない。初日に来たクライアント名は 33 種、
- * 翌日にはさらに増え、毎回新しい名前が現れる。名簿の保守はいずれ破綻する。
- *
- * ふるまいで見れば名前に依存しない。initialize だけしてツールを一度も
- * 呼ばずに去るのは、名前が何であれ生存確認か棚卸しであって、需要ではない。
- * 名前による判定はその補助として残す（ツールを呼んだ巡回ボットも実在しうる）。
- *
- * **「呼んだ」だけでは足りない。** 実際に来た `sasame-audit` は、各ツールを
- * 引数なしと `"test"` で 2 回ずつ、同一秒に 6 回叩いて 5 回失敗させて去った。
- * これは適合性の確認であって利用ではない。当初 calls > 0 で実利用に数えて
- * しまい、「初の実利用」と誤って報告しかけた。
- *
- * 成功した呼び出しが 1 度も無いセッションは、何を確かめに来たのであれ需要ではない。
- * ただし `sasame-audit` は 6 回中 1 回だけ偶然成功していたので、ok > 0 でも
- * まだ実利用に数えてしまった。**過半数が失敗しているなら、それは使っている
- * のではなく試している。**
- *
- * これは経験則であって証明ではない。取りこぼす可能性はあるが、方向は
- * 「実需要を過小評価する」側に倒してある。本物の利用者は 1 セッションの
- * 判定ではなく、日をまたいだ再訪と実在パッケージ名で見分けがつくはず。
- */
-const isProbe = (s) => nameLooksLikeProbe(s.client) || s.ok === 0 || s.ok * 2 < s.calls;
 
 const pct = (a, b) => (b === 0 ? '—' : ((a / b) * 100).toFixed(1) + '%');
 const h = (s) => console.log('\n' + s + '\n' + '─'.repeat(s.length));
@@ -117,21 +81,16 @@ const sessions = q(
   "SELECT e.session_id sid, MAX(i.client_name) client, SUM(CASE WHEN e.event='tool_call' THEN 1 ELSE 0 END) calls, SUM(CASE WHEN e.event='tool_call' AND (e.verdict IS NULL OR e.verdict <> 'error') THEN 1 ELSE 0 END) ok, MIN(e.created_at) first_seen, MAX(e.created_at) last_seen FROM mcp_events e LEFT JOIN mcp_events i ON i.session_id = e.session_id AND i.event='initialize' WHERE e.synthetic = 0 AND e.session_id IS NOT NULL GROUP BY e.session_id",
 );
 
-const real = sessions.filter((s) => !isProbe(s));
-const namedProbes = sessions.filter((s) => nameLooksLikeProbe(s.client));
-const silent = sessions.filter((s) => !nameLooksLikeProbe(s.client) && s.calls === 0);
-const errored = sessions.filter(
-  (s) => !nameLooksLikeProbe(s.client) && s.calls > 0 && (s.ok === 0 || s.ok * 2 < s.calls),
-);
+const { real, namedProbes, silent, errored } = classifySessions(sessions);
 
 console.log(`セッション総数         ${sessions.length}`);
 console.log(`  巡回ボット等（名前）  ${namedProbes.length}`);
 console.log(`  接続のみで何もせず   ${silent.length}   ← 名前は不明だがツール未使用`);
-console.log(`  壊れ方を試しただけ   ${errored.length}   ← 呼んだが過半数が失敗（適合性テスト）`);
+console.log(`  壊れ方を試しただけ   ${errored.length}   ← 呼んだが成功が過半数に届かない（適合性テスト）`);
 for (const e of errored) {
   console.log(`      ${e.client ?? '(名前なし)'}  ok=${e.ok}/${e.calls}`);
 }
-console.log(`  実利用               ${real.length}   ← ツールを1回以上成功させた`);
+console.log(`  実利用               ${real.length}   ← 成功が過半数のセッション`);
 
 const repeat = real.filter((s) => s.calls >= 2);
 
@@ -197,16 +156,9 @@ console.log(`連絡先を残した         ${emailed}   (${pct(emailed, scanned)
 
 // 到達の総数ではなく、**人間とみなせる到達**で診断する。
 // ボットや判別不能を数えると「入口が悪い」と誤診し、流入が要る段階で
-// 入口をいじり続けることになる。
-if (humans > 0 && scanned === 0) {
-  console.log('\n人間が到達しているのに判定まで進んでいない。入口の問題。');
-} else if (humans > 0) {
-  console.log(`\n人間の到達 ${humans} 件のうち ${scanned} 件が判定まで到達。`);
-} else if (landed > 0) {
-  console.log('\n到達はあるが、人間とみなせるものは 0。まだ流入の段階。');
-} else {
-  console.log('\n到達が 0。入口を直しても意味がない。流入を作る段階。');
-}
+// 入口をいじり続けることになる。分子も同じ絞り方に揃える。
+const humanScanned = byKind('scan_succeeded', ['browser']);
+console.log('\n' + diagnoseWeb({ humans, humanScanned, landed }).message);
 
 const [webNull] = q('SELECT COUNT(*) n FROM events WHERE synthetic IS NULL');
 if (webNull.n > 0) console.log(`\n帰属不能（計測前）     ${webNull.n} 行を除外済み`);
@@ -232,16 +184,8 @@ if (leadNull.n > 0) console.log(`\n帰属不能（計測前）     ${leadNull.n}
 
 h('Phase 0 の判断');
 
-if (scanned < 30 && real.length < 30) {
-  console.log('判断できません。標本が足りません。');
-  console.log('判定完了セッションかツール利用セッションが 30 を超えるまでは、');
-  console.log('比率を読んでも偶然と区別できません。');
-} else {
-  const rate = scanned > 0 ? (emailed / scanned) * 100 : 0;
-  console.log(`興味表明率 ${rate.toFixed(1)}%`);
-  if (rate >= 5) console.log('→ Phase 1（GitHub App）に進む水準');
-  else if (rate >= 1) console.log('→ 訴求文と価格を作り直して再測定');
-  else console.log('→ 買い手仮説の切り替えを検討する');
+for (const line of phaseVerdict({ scanned, realCount: real.length, emailed }).message) {
+  console.log(line);
 }
 
 console.log('');
