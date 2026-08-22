@@ -68,8 +68,22 @@ const nameLooksLikeProbe = (name) => !name || PROBE_PATTERNS.some((re) => re.tes
  * ふるまいで見れば名前に依存しない。initialize だけしてツールを一度も
  * 呼ばずに去るのは、名前が何であれ生存確認か棚卸しであって、需要ではない。
  * 名前による判定はその補助として残す（ツールを呼んだ巡回ボットも実在しうる）。
+ *
+ * **「呼んだ」だけでは足りない。** 実際に来た `sasame-audit` は、各ツールを
+ * 引数なしと `"test"` で 2 回ずつ、同一秒に 6 回叩いて 5 回失敗させて去った。
+ * これは適合性の確認であって利用ではない。当初 calls > 0 で実利用に数えて
+ * しまい、「初の実利用」と誤って報告しかけた。
+ *
+ * 成功した呼び出しが 1 度も無いセッションは、何を確かめに来たのであれ需要ではない。
+ * ただし `sasame-audit` は 6 回中 1 回だけ偶然成功していたので、ok > 0 でも
+ * まだ実利用に数えてしまった。**過半数が失敗しているなら、それは使っている
+ * のではなく試している。**
+ *
+ * これは経験則であって証明ではない。取りこぼす可能性はあるが、方向は
+ * 「実需要を過小評価する」側に倒してある。本物の利用者は 1 セッションの
+ * 判定ではなく、日をまたいだ再訪と実在パッケージ名で見分けがつくはず。
  */
-const isProbe = (s) => nameLooksLikeProbe(s.client) || s.calls === 0;
+const isProbe = (s) => nameLooksLikeProbe(s.client) || s.ok === 0 || s.ok * 2 < s.calls;
 
 const pct = (a, b) => (b === 0 ? '—' : ((a / b) * 100).toFixed(1) + '%');
 const h = (s) => console.log('\n' + s + '\n' + '─'.repeat(s.length));
@@ -97,29 +111,38 @@ h('MCP: 実利用（自分の検証と巡回ボットを除く）');
 
 // セッション単位の一覧。initialize 行が client_name を持ち、
 // tool_call 行は同じ session_id を持つので、ここで初めて結合できる。
+// ok は「エラーにならなかった呼び出し」。explain_license は成功しても
+// verdict を持たない（byDistributionModel を返す）ので、NULL を成功に数える。
 const sessions = q(
-  "SELECT e.session_id sid, MAX(i.client_name) client, SUM(CASE WHEN e.event='tool_call' THEN 1 ELSE 0 END) calls, MIN(e.created_at) first_seen, MAX(e.created_at) last_seen FROM mcp_events e LEFT JOIN mcp_events i ON i.session_id = e.session_id AND i.event='initialize' WHERE e.synthetic = 0 AND e.session_id IS NOT NULL GROUP BY e.session_id",
+  "SELECT e.session_id sid, MAX(i.client_name) client, SUM(CASE WHEN e.event='tool_call' THEN 1 ELSE 0 END) calls, SUM(CASE WHEN e.event='tool_call' AND (e.verdict IS NULL OR e.verdict <> 'error') THEN 1 ELSE 0 END) ok, MIN(e.created_at) first_seen, MAX(e.created_at) last_seen FROM mcp_events e LEFT JOIN mcp_events i ON i.session_id = e.session_id AND i.event='initialize' WHERE e.synthetic = 0 AND e.session_id IS NOT NULL GROUP BY e.session_id",
 );
 
 const real = sessions.filter((s) => !isProbe(s));
 const namedProbes = sessions.filter((s) => nameLooksLikeProbe(s.client));
 const silent = sessions.filter((s) => !nameLooksLikeProbe(s.client) && s.calls === 0);
+const errored = sessions.filter(
+  (s) => !nameLooksLikeProbe(s.client) && s.calls > 0 && (s.ok === 0 || s.ok * 2 < s.calls),
+);
 
 console.log(`セッション総数         ${sessions.length}`);
 console.log(`  巡回ボット等（名前）  ${namedProbes.length}`);
 console.log(`  接続のみで何もせず   ${silent.length}   ← 名前は不明だがツール未使用`);
-console.log(`  実利用               ${real.length}   ← ツールを1回以上呼んだ`);
+console.log(`  壊れ方を試しただけ   ${errored.length}   ← 呼んだが過半数が失敗（適合性テスト）`);
+for (const e of errored) {
+  console.log(`      ${e.client ?? '(名前なし)'}  ok=${e.ok}/${e.calls}`);
+}
+console.log(`  実利用               ${real.length}   ← ツールを1回以上成功させた`);
 
 const repeat = real.filter((s) => s.calls >= 2);
 
 console.log(`\n2回以上呼んだ（継続）   ${repeat.length}   ← Phase 0 の本命指標`);
-console.log(`呼び出し総数            ${real.reduce((a, s) => a + s.calls, 0)}`);
+console.log(`成功した呼び出し総数    ${real.reduce((a, s) => a + s.ok, 0)}`);
 
 if (real.length > 0) {
   console.log('\n実利用セッション:');
   for (const s of real.slice(0, 30)) {
     const t = new Date(s.first_seen).toISOString().replace('T', ' ').slice(0, 16);
-    console.log(`  ${t}  calls=${String(s.calls).padStart(3)}  ${s.client ?? '(名前なし)'}`);
+    console.log(`  ${t}  ok=${String(s.ok).padStart(3)}/${s.calls}  ${s.client ?? '(名前なし)'}`);
   }
 }
 
