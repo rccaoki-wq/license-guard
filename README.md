@@ -171,7 +171,7 @@ Given the subject matter, every dependency is deliberately MIT or Apache-2.0. No
 |---|---|---|
 | SPDX expression parsing | `spdx-expression-parse` | MIT |
 | Web framework | `hono` | MIT |
-| Go license data | ClearlyDefined API | Apache-2.0 |
+| Go license data | deps.dev API (fallback: ClearlyDefined) | Apache-2.0 |
 
 ## Privacy
 
