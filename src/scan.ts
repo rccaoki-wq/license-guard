@@ -1,4 +1,4 @@
-import { detectAndParse, MAX_LOOKUPS } from './manifests';
+import { detectAndParse, LOCKFILE_NAME, MAX_LOOKUPS } from './manifests';
 import { LicenseResolver, defaultFetchers } from './resolver';
 import type { CacheLike, Fetchers } from './resolver';
 import { evaluateExpression } from './policy/engine';
@@ -77,17 +77,19 @@ function summarize(findings: Finding[]): ScanSummary {
   };
 }
 
-function limitationsFor(ecosystem: Ecosystem, findings: Finding[]): string[] {
-  // ロックファイルなら推移的依存まで見えている。同じ但し書きを出すと嘘になる
-  const fromLockfile = findings.some((f) => f.resolvedFrom === 'lockfile');
-
-  const out = fromLockfile
+function limitationsFor(ecosystem: Ecosystem, findings: Finding[], transitive: boolean): string[] {
+  // 推移的依存まで見えたかは**どのパーサを通ったか**でしか決まらない。
+  // かつて Finding の `resolvedFrom` で判定しており、npm はロックファイルに
+  // ライセンスを書かないため常に false になって、ロックファイルを貼った人に
+  // 「ロックファイルを貼れ」と返していた。助言するファイル名もエコシステムに
+  // 合わせる（requirements.txt の利用者に package-lock.json を勧めない）
+  const out = transitive
     ? [
         'Transitive dependencies are included, read from the lockfile with the exact versions that will be installed.',
         'Results are based on license metadata recorded in the lockfile. Code copied into your own source files is not detected.',
       ]
     : [
-        'Only direct dependencies were checked. Transitive dependencies are not included — send a package-lock.json to cover those.',
+        `Only direct dependencies were checked. Transitive dependencies are not included — send a ${LOCKFILE_NAME[ecosystem]} to cover those.`,
         'Results are based on license metadata declared in the manifest. Code copied into your own source files is not detected.',
       ];
 
@@ -202,6 +204,6 @@ export async function scan(
     distributionModel,
     findings,
     summary: summarize(findings),
-    limitations: limitationsFor(parsed.ecosystem, findings),
+    limitations: limitationsFor(parsed.ecosystem, findings, parsed.transitive),
   };
 }

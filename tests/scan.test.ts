@@ -111,6 +111,30 @@ describe('scan', () => {
     expect(result.limitations.some((l) => l.includes('direct dependencies'))).toBe(true);
   });
 
+  // ロックファイルを貼った人に「ロックファイルを貼れ」と返していた。
+  // 推移的依存を見たかどうかは**どのパーサを通ったか**で決まるのに、
+  // ライセンスをどこから読んだか（ほぼ常に registry）で判定していたため、
+  // この分岐は npm では永久に false だった。
+  it('package-lock.json を渡したら「直接依存のみ」と言わない', async () => {
+    const lock = JSON.stringify({
+      lockfileVersion: 3,
+      packages: { '': {}, 'node_modules/a': { version: '1.0.0' } },
+    });
+    const result = await scan(lock, 'saas', noopCache(), fetchers({ a: 'MIT' }));
+    expect(result.limitations.some((l) => l.includes('Only direct dependencies'))).toBe(false);
+    expect(result.limitations.some((l) => l.includes('Transitive dependencies are included'))).toBe(
+      true,
+    );
+  });
+
+  // requirements.txt を貼った人に package-lock.json を勧めていた。
+  // 助言が的外れだと、出力全体の信用が落ちる
+  it('直接依存のみのとき、そのエコシステムのロックファイル名で助言する', async () => {
+    const result = await scan('a==1.0.0\n', 'saas', noopCache(), fetchers({ a: 'MIT' }));
+    expect(result.limitations.some((l) => l.includes('Only direct dependencies'))).toBe(true);
+    expect(result.limitations.some((l) => l.includes('package-lock.json'))).toBe(false);
+  });
+
   it('フォールバックが起きていないときは無用な警告を出さない', async () => {
     // 常時警告するとオオカミ少年になる。実際に起きた場合のみ、
     // 該当する項目の理由文と limitations の両方で開示する（audit-regressions.test.ts）
