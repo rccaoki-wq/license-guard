@@ -63,9 +63,12 @@ licenseguard.io は**ほぼ同じもの**（lockfile を読んで GPL リスク�
 > - Static vs dynamic linking flips LGPL. Go and Rust link statically by default
 >   and nothing in the lockfile says so.
 >
-> It's free, no signup, nothing is stored — the manifest is parsed in the request
-> and package names go to the public registries only. It also runs as an MCP
-> server so a coding agent can call it instead of guessing.
+> It's free and there's no signup. The manifest isn't stored — it's parsed in the
+> request. Package names that resolve to a license on a public registry are
+> cached as name → license so the next lookup is free, with no record of who
+> asked; names that don't resolve, which is what an internal package looks like,
+> are never written. It also runs as an MCP server so a coding agent can call it
+> instead of guessing.
 >
 > Source: https://github.com/rccaoki-wq/license-guard (Apache-2.0)
 >

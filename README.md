@@ -173,7 +173,13 @@ Given the subject matter, every dependency is deliberately MIT or Apache-2.0. No
 
 ## Privacy
 
-The hosted service does not store manifest contents, package names, or IP addresses. What it does record is the shape of usage: which tool was called, for which ecosystem and distribution model, what verdict came back, and an opaque session identifier so that repeat use can be counted at all. See [`src/mcp/telemetry.ts`](src/mcp/telemetry.ts) for the exact fields.
+The hosted service does not store manifest contents or IP addresses. What it records is the shape of usage: which tool was called, for which ecosystem and distribution model, what verdict came back, and an opaque session identifier so that repeat use can be counted at all. No package name appears in any of those rows. See [`src/mcp/telemetry.ts`](src/mcp/telemetry.ts) for the exact fields.
+
+Package names **are** stored in one place, and it is worth being exact about which: a lookup that succeeds is cached as `(ecosystem, package, version) → SPDX id`, so the next caller does not hit the registry again. Three things follow from how that table is written, and each is pinned by a test:
+
+- It has **no column for who asked.** Rows carry no session, no request, no address, so nothing in the cache can be traced back to a user — see [`migrations/0001_init.sql`](migrations/0001_init.sql).
+- A name that **could not be resolved is never written** ([`src/resolver/index.ts`](src/resolver/index.ts) returns before the cache write). A package that is not on a public registry — an internal one — is exactly the case that fails to resolve.
+- The cache is **not private**: it is what fills [`/sitemap.xml`](https://license-guard.rcc-aoki.workers.dev/sitemap.xml). Everything in it is already published on npm, PyPI, Go or crates.io under that name.
 
 The session identifier is issued as the spec's `Mcp-Session-Id` header. It is a random value with no meaning outside this database, it is never required, and it never expires — clients that ignore it keep working.
 

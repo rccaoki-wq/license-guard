@@ -80,6 +80,29 @@ describe('LicenseResolver', () => {
     expect(out.resolvedFrom).toBe('unresolved');
   });
 
+  // プライバシー上の約束そのもの。解決できなかった名前は書かない。
+  // 公開レジストリに無い社内パッケージは、まさにこの経路を通る。
+  // キャッシュは /sitemap.xml の出所でもあるので、ここが緩むと社内名が公開されうる。
+  it('解決できなかったパッケージ名はキャッシュに書かない', async () => {
+    const cache = stubCache();
+    const npm = vi.fn(async () => ({ spdx: null }));
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn() });
+
+    await r.resolve(dep({ name: '@acme-internal/billing' }));
+    expect(cache.store.size).toBe(0);
+  });
+
+  it('フェッチャが落ちたときもパッケージ名をキャッシュに書かない', async () => {
+    const cache = stubCache();
+    const npm = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn() });
+
+    await r.resolve(dep({ name: '@acme-internal/billing' }));
+    expect(cache.store.size).toBe(0);
+  });
+
   it('resolveAll は全依存を解決する', async () => {
     const cache = stubCache();
     const npm = vi.fn(async () => ({ spdx: 'MIT' }));
