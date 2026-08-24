@@ -13,7 +13,7 @@
  */
 import { verdictMatrix, type MatrixRow } from '../policy/matrix';
 import { findLicense, type LicenseEntry } from '../seo/catalog';
-import { esc, faqJsonLd, renderLayout, scanCta } from './layout';
+import { collectionJsonLd, esc, faqJsonLd, faqSection, renderLayout, scanCta } from './layout';
 
 export interface ComparePair {
   a: string;
@@ -174,6 +174,30 @@ export function renderComparePage(pair: ComparePair): string | null {
       ? `${pair.a} and ${pair.b} reach the same verdict for every distribution model. Here is what that means and what still separates them.`
       : `${pair.a} and ${pair.b} differ in ${differing} of 5 distribution models. Side by side, with the clause that causes each difference.`;
 
+  const diffRows = rowsA
+    .map((ra, i) => ({ ra, rb: rowsB[i]! }))
+    .filter(({ ra, rb }) => ra.verdict !== rb.verdict);
+
+  // 本文と構造化データを同じ配列から作る
+  const faqs = [
+    {
+      question: `What is the difference between ${pair.a} and ${pair.b}?`,
+      answer:
+        diffRows.length === 0
+          ? `${pair.a} and ${pair.b} reach the same verdict for every way of shipping software. What separates them is not the obligation to disclose source.`
+          : diffRows
+              .map(
+                ({ ra, rb }) =>
+                  `${MODEL_LABEL[ra.model]}: ${pair.a} — ${ra.rationale} ${pair.b} — ${rb!.rationale}`,
+              )
+              .join(' '),
+    },
+    ...rowsA.map((ra, i) => ({
+      question: `For ${MODEL_LABEL[ra.model]!.toLowerCase()}, is ${pair.a} or ${pair.b} more restrictive?`,
+      answer: `${pair.a}: ${ra.rationale} ${pair.b}: ${rowsB[i]!.rationale}`,
+    })),
+  ];
+
   const body = `
 <h1>${esc(pair.a)} vs ${esc(pair.b)}</h1>
 <p class="sub">${esc(pair.why)}</p>
@@ -181,48 +205,29 @@ export function renderComparePage(pair: ComparePair): string | null {
 <h2>Can you use them, and where?</h2>
 ${summarise(rowsA, rowsB, pair.a, pair.b)}
 
-<h2>Side by side</h2>
+<h2>How do ${esc(pair.a)} and ${esc(pair.b)} compare for each way of shipping?</h2>
 <p>Runtime dependency, dynamically linked. A build-time-only dependency reaches no user and carries no distribution obligation, whichever license it uses.</p>
 ${sideBySide(rowsA, rowsB, pair.a, pair.b)}
 
-<h2>${esc(pair.a)}</h2>
+<h2>What does ${esc(pair.a)} require?</h2>
 <p>${esc(ea.summary)}</p>
 <p><a href="/license/${encodeURIComponent(pair.a)}">Full obligations for ${esc(pair.a)}</a></p>
 
-<h2>${esc(pair.b)}</h2>
+<h2>What does ${esc(pair.b)} require?</h2>
 <p>${esc(eb.summary)}</p>
 <p><a href="/license/${encodeURIComponent(pair.b)}">Full obligations for ${esc(pair.b)}</a></p>
 
+${faqSection(faqs)}
+
 ${scanCta(`Want to know which of these your project actually depends on?`)}
 `;
-
-  const diffRows = rowsA
-    .map((ra, i) => ({ ra, rb: rowsB[i]! }))
-    .filter(({ ra, rb }) => ra.verdict !== rb.verdict);
 
   return renderLayout({
     title,
     description,
     path: comparePath(pair),
     body,
-    jsonLd: faqJsonLd([
-      {
-        question: `What is the difference between ${pair.a} and ${pair.b}?`,
-        answer:
-          diffRows.length === 0
-            ? `${pair.a} and ${pair.b} reach the same verdict for every way of shipping software. What separates them is not the obligation to disclose source.`
-            : diffRows
-                .map(
-                  ({ ra, rb }) =>
-                    `${MODEL_LABEL[ra.model]}: ${pair.a} — ${ra.rationale} ${pair.b} — ${rb!.rationale}`,
-                )
-                .join(' '),
-      },
-      ...rowsA.map((ra, i) => ({
-        question: `For ${MODEL_LABEL[ra.model]!.toLowerCase()}, is ${pair.a} or ${pair.b} more restrictive?`,
-        answer: `${pair.a}: ${ra.rationale} ${pair.b}: ${rowsB[i]!.rationale}`,
-      })),
-    ]),
+    jsonLd: faqJsonLd(faqs),
   });
 }
 
@@ -255,5 +260,12 @@ ${scanCta(`Not sure which licenses your project pulls in? Paste a lockfile.`)}
       'AGPL vs GPL, GPL vs LGPL, MIT vs Apache-2.0 and more — compared by what each one obligates you to do, for each way of shipping software.',
     path: '/compare',
     body,
+    jsonLd: collectionJsonLd({
+      name: 'License comparisons',
+      description:
+        'Side-by-side comparisons of commonly confused open source licenses, resolved per distribution model.',
+      path: '/compare',
+      items: COMPARE_PAIRS.map((p) => ({ name: `${p.a} vs ${p.b}`, path: comparePath(p) })),
+    }),
   });
 }

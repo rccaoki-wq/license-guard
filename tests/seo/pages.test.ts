@@ -60,8 +60,8 @@ describe('renderLicensePage', () => {
   });
 
   it('リンク形態で結論が変わるライセンスのみ静的リンク表を出す', () => {
-    expect(renderLicensePage(findLicense('LGPL-3.0-only')!)).toContain('Static linking changes');
-    expect(renderLicensePage(findLicense('MIT')!)).not.toContain('Static linking changes');
+    expect(renderLicensePage(findLicense('LGPL-3.0-only')!)).toContain('Does static linking change');
+    expect(renderLicensePage(findLicense('MIT')!)).not.toContain('Does static linking change');
   });
 });
 

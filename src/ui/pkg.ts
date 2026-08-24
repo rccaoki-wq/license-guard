@@ -1,6 +1,15 @@
 import { verdictMatrix } from '../policy/matrix';
 import { findLicense } from '../seo/catalog';
-import { MODEL_LABEL, faqJsonLd, esc, obligationBadges, renderLayout, scanCta, verdictTable } from './layout';
+import {
+  MODEL_LABEL,
+  faqJsonLd,
+  faqSection,
+  esc,
+  obligationBadges,
+  renderLayout,
+  scanCta,
+  verdictTable,
+} from './layout';
 import type { Ecosystem, Linkage } from '../types';
 
 const ECOSYSTEM_LABEL: Record<Ecosystem, string> = {
@@ -56,16 +65,29 @@ export function renderPackagePage(input: PackagePageInput): string {
   const title = `Is ${name} safe for commercial use? ${spdx} license obligations`;
   const description = `${name} (${eco}) is licensed under ${spdx}. See what that requires for hosted SaaS, distributed binaries, customer delivery, internal use, and published libraries.`;
 
+  // 本文と構造化データを同じ配列から作る
+  const faqs = [
+    { question: `Is ${name} safe for commercial use?`, answer: headline },
+    ...rows.map((r) => ({
+      question: `Can I use ${name} (${spdx}) in ${MODEL_LABEL[r.model]!.toLowerCase()}?`,
+      answer: r.rationale,
+    })),
+    {
+      question: `Does ${name} matter if it is only a build-time or dev dependency?`,
+      answer: dev.rationale,
+    },
+  ];
+
   const body = `
 <h1>Is <code>${esc(name)}</code> safe for commercial use?</h1>
 <p class="sub">${esc(eco)} package &middot; License: <a href="${known ? `/license/${encodeURIComponent(known.id)}` : '/licenses'}">${esc(spdx)}</a></p>
 
 <p>${esc(headline)}</p>
 
-<h2>Result by how you ship</h2>
+<h2>Can I use ${esc(name)} in SaaS, a distributed app, or internally?</h2>
 ${verdictTable(rows)}
 
-<h2>What you have to do</h2>
+<h2>What obligations does ${esc(name)} carry?</h2>
 <p>${obligationBadges(rows.find((r) => r.obligations.length > 0)?.obligations ?? [])}</p>
 
 <div class="callout">
@@ -75,15 +97,17 @@ ${verdictTable(rows)}
 
 ${
   known
-    ? `<h2>About ${esc(known.id)}</h2>
+    ? `<h2>What is ${esc(known.id)}?</h2>
 <p>${esc(known.summary)}</p>
 <p><a href="/license/${encodeURIComponent(known.id)}">Full ${esc(known.id)} reference &rarr;</a></p>`
     : ''
 }
 
+${faqSection(faqs)}
+
 ${scanCta(`This page covers one package. Your ${MANIFEST_NAME[ecosystem]} has many more.`)}
 
-<h2>How this was determined</h2>
+<h2>How was this determined?</h2>
 <p>The license was read from ${ecosystem === 'go' ? 'ClearlyDefined, which curates license data for Go modules' : ecosystem === 'cargo' ? 'crates.io' : `the ${eco} registry`}, then evaluated against each shipping model. ${ecosystem === 'go' || ecosystem === 'cargo' ? 'Dependencies in this ecosystem are linked statically, which is assumed here.' : ''} Only the declared license is considered; code copied into a project's own source files is not detected by this method.</p>
 `;
 
@@ -92,19 +116,9 @@ ${scanCta(`This page covers one package. Your ${MANIFEST_NAME[ecosystem]} has ma
     description,
     path: packagePath(ecosystem, name),
     body,
-    // 「この依存は使えるのか」という問いそのままの形で機械可読にする。
-    // 判定文は verdictMatrix の出力で、ここで書き起こさない
-    jsonLd: faqJsonLd([
-      { question: `Is ${name} safe for commercial use?`, answer: headline },
-      ...rows.map((r) => ({
-        question: `Can I use ${name} (${spdx}) in ${MODEL_LABEL[r.model]!.toLowerCase()}?`,
-        answer: r.rationale,
-      })),
-      {
-        question: `Does ${name} matter if it is only a build-time or dev dependency?`,
-        answer: dev.rationale,
-      },
-    ]),
+    // 本文の faqSection と同じ配列。判定文は verdictMatrix の出力で、
+    // ここで書き起こさない
+    jsonLd: faqJsonLd(faqs),
   });
 }
 

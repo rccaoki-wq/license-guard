@@ -1,5 +1,6 @@
 import type { MatrixRow } from '../policy/matrix';
 import type { DistributionModel, Obligation, Verdict } from '../types';
+import { LAST_REVIEWED, LAST_REVIEWED_ISO } from '../seo/reviewed';
 
 export function esc(s: unknown): string {
   return String(s).replace(
@@ -73,8 +74,20 @@ text-decoration:none;background:var(--card)}
 .disclaimer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);
 color:var(--muted);font-size:.8rem}
 .hidden{display:none}
+.faq h3{font-size:1rem;margin:22px 0 6px}
+.faq p{margin:0;color:var(--muted)}
+.reviewed{margin-top:30px;color:var(--muted);font-size:.8rem}
 @media (max-width:560px){table{font-size:.85rem}th,td{padding:8px 6px}}
 `;
+
+/**
+ * 最終確認日を全ページに出す。
+ *
+ * 取得側は鮮度を見る。日付が無いページは「いつのものか分からないもの」として
+ * 後ろに置かれる。ライセンス解釈は年単位でしか動かないので、
+ * **動いた日だけを書く**（LAST_REVIEWED を参照）。毎日今日を出すと嘘になる。
+ */
+export const REVIEWED_HTML = `<p class="reviewed">License data last reviewed <time datetime="${LAST_REVIEWED_ISO}">${LAST_REVIEWED}</time>.</p>`;
 
 export const DISCLAIMER_HTML = `<p class="disclaimer">
 LicenseGuard reports information derived from published license texts and dependency manifests.
@@ -104,6 +117,11 @@ export interface FaqEntry {
   answer: string;
 }
 
+/** `</script>` の閉じ込みを防ぐ。外部入力（パッケージ名）が入るので省略できない */
+function jsonLdBlock(data: unknown): string {
+  return `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
+}
+
 /**
  * 構造化データ（FAQPage）。
  *
@@ -111,24 +129,110 @@ export interface FaqEntry {
  * 狙いは検索結果の見た目ではなく、**引用されるときに問いと答えの対応が
  * 曖昧にならないこと**。散文から抜き出させると、答えの範囲が勝手に伸び縮みする。
  *
- * `</script>` の閉じ込みを防ぐため `<` を必ずエスケープする。
- * パッケージ名は URL 由来＝外部入力なので、ここは省略できない。
+ * **必ず faqSection() と同じ配列から作ること。** 構造化データの規定でも、
+ * FAQPage の内容はページ上に見えている必要がある。以前は JSON-LD にだけ
+ * 問いと答えがあり、本文には無かった。規定に反するうえ、本文しか読まない
+ * 取得側からは問いの形が一切見えていなかった。
  */
 export function faqJsonLd(entries: FaqEntry[]): string {
   if (entries.length === 0) return '';
 
-  const data = {
+  return jsonLdBlock({
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
+    dateModified: LAST_REVIEWED_ISO,
     mainEntity: entries.map((e) => ({
       '@type': 'Question',
       name: e.question,
       acceptedAnswer: { '@type': 'Answer', text: e.answer },
     })),
-  };
+  });
+}
 
-  const json = JSON.stringify(data).replace(/</g, '\\u003c');
-  return `<script type="application/ld+json">${json}</script>`;
+/**
+ * 問いと答えを**本文に出す**。
+ *
+ * 取得側はページを塊に切って引く。塊の中に問いの文そのものが無いと、
+ * 「AGPL は SaaS で使えるか」と聞かれたときに拾われない。表の行見出しは
+ * `Hosted SaaS` であって、誰もその言い方では聞かない。
+ *
+ * 見出しは h3。ページの h1/h2 の構造を壊さずに、問いを独立した塊にする。
+ */
+export function faqSection(entries: FaqEntry[], heading = 'Questions this page answers'): string {
+  if (entries.length === 0) return '';
+
+  const items = entries
+    .map((e) => `<h3>${esc(e.question)}</h3>\n<p>${esc(e.answer)}</p>`)
+    .join('\n');
+
+  return `<h2>${esc(heading)}</h2>\n<div class="faq">\n${items}\n</div>`;
+}
+
+/**
+ * トップページ用。**これは何なのか**を機械可読にする。
+ *
+ * 引用されるかどうかの前に、何を答えられる場所なのかが分からないと
+ * 候補にすら入らない。無料・登録不要であることは判断材料として大きいので、
+ * offers に明示する（価格を伏せると「試すまで分からないもの」に分類される）。
+ */
+export function softwareAppJsonLd(): string {
+  return jsonLdBlock({
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'LicenseGuard',
+    url: SITE_ORIGIN + '/',
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'Any',
+    dateModified: LAST_REVIEWED_ISO,
+    description:
+      'Checks whether the licenses of your dependencies create obligations for the way you actually ship software — hosted SaaS, distributed binary, customer delivery, internal use, or published library.',
+    featureList: [
+      'Evaluates license obligations per distribution model, not per license name',
+      'Reads package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock',
+      'Separates build-time dependencies from shipped ones',
+      'Available as an MCP server for AI agents',
+    ],
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    isAccessibleForFree: true,
+    license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  });
+}
+
+export interface ListItem {
+  name: string;
+  path: string;
+}
+
+/**
+ * 一覧ページ用（CollectionPage + ItemList）。
+ *
+ * 一覧は本文が短く、リンクの集まりにしか見えない。何の一覧で、
+ * どこへ続くのかを明示しないと、取得側は 1 枚の薄いページとして扱う。
+ */
+export function collectionJsonLd(o: {
+  name: string;
+  description: string;
+  path: string;
+  items: ListItem[];
+}): string {
+  return jsonLdBlock({
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: o.name,
+    description: o.description,
+    url: SITE_ORIGIN + o.path,
+    dateModified: LAST_REVIEWED_ISO,
+    mainEntity: {
+      '@type': 'ItemList',
+      numberOfItems: o.items.length,
+      itemListElement: o.items.map((it, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        name: it.name,
+        url: SITE_ORIGIN + it.path,
+      })),
+    },
+  });
 }
 
 /**
@@ -191,6 +295,7 @@ ${o.jsonLd ?? ''}
   </nav>
 </div>
 ${o.body}
+${REVIEWED_HTML}
 ${DISCLAIMER_HTML}
 ${LISTINGS_HTML}
 </div>

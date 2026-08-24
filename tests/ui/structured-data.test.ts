@@ -82,8 +82,22 @@ describe('ライセンスページの構造化データ', () => {
     for (const l of LICENSE_CATALOG) {
       const j = extract(renderLicensePage(l));
       expect(j, l.id).not.toBeNull();
-      // 5 モデル + dev スコープ
-      expect(j.mainEntity.length, l.id).toBe(6);
+      // 5 モデル + dev スコープ。静的リンクで結論が変わるものは、その問いが 1 つ増える
+      const linkageMatters = verdictMatrix(l.id, 'runtime', 'static').some(
+        (r, i) => r.verdict !== verdictMatrix(l.id, 'runtime')[i]!.verdict,
+      );
+      expect(j.mainEntity.length, l.id).toBe(linkageMatters ? 7 : 6);
+    }
+  });
+
+  it('本文に無い問いを構造化データで主張しない', () => {
+    // JSON-LD だけに Q&A があると、引用されたときページに無いことを答えたことになる
+    for (const l of LICENSE_CATALOG) {
+      const html = renderLicensePage(l);
+      const j = extract(html);
+      for (const q of j.mainEntity) {
+        expect(html, `${l.id}: ${q.name}`).toContain(q.name.replace(/&/g, '&amp;'));
+      }
     }
   });
 

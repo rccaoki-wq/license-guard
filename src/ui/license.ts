@@ -1,7 +1,17 @@
 import { verdictMatrix } from '../policy/matrix';
 import { categorize } from '../policy/categories';
 import { LICENSE_CATALOG, type LicenseEntry } from '../seo/catalog';
-import { esc, faqJsonLd, obligationBadges, renderLayout, scanCta, verdictTable, MODEL_LABEL } from './layout';
+import {
+  esc,
+  collectionJsonLd,
+  faqJsonLd,
+  faqSection,
+  obligationBadges,
+  renderLayout,
+  scanCta,
+  verdictTable,
+  MODEL_LABEL,
+} from './layout';
 import type { LicenseCategory } from '../types';
 
 const CATEGORY_LABEL: Record<LicenseCategory, string> = {
@@ -29,17 +39,41 @@ export function renderLicensePage(entry: LicenseEntry): string {
   const title = `${entry.name} (${entry.id}): obligations for SaaS, distribution, and internal use`;
   const description = `What ${entry.id} requires depending on how you ship your software. ${entry.summary.slice(0, 110)}`;
 
+  // 本文と構造化データを**同じ配列から**作る。別々に書くと必ず食い違い、
+  // 引用されたときにページに無いことを答えたことになる
+  const faqs = [
+    ...runtime.map((r) => ({
+      question: `Can I use ${entry.id} in ${MODEL_LABEL[r.model].toLowerCase()}?`,
+      answer: r.rationale,
+    })),
+    {
+      question: `Does ${entry.id} matter if it is only a build-time or dev dependency?`,
+      answer: dev.rationale,
+    },
+    ...(linkageMatters
+      ? [
+          {
+            question: `Does static linking change what ${entry.id} requires?`,
+            answer: `Yes. ${staticRows
+              .filter((r, i) => r.verdict !== runtime[i]!.verdict)
+              .map((r) => `${MODEL_LABEL[r.model]}: ${r.rationale}`)
+              .join(' ')}`,
+          },
+        ]
+      : []),
+  ];
+
   const body = `
 <h1>${esc(entry.name)}</h1>
 <p class="sub"><code>${esc(entry.id)}</code> &middot; ${esc(CATEGORY_LABEL[category])}</p>
 
 <p>${esc(entry.summary)}</p>
 
-<h2>What ${esc(entry.id)} requires, by how you ship</h2>
-<p>The same license produces different obligations depending on whether the software is distributed, hosted, or kept internal. This is the distinction most dependency scanners collapse.</p>
+<h2>Does ${esc(entry.id)} apply differently to SaaS, distribution, and internal use?</h2>
+<p>Yes. The same license produces different obligations depending on whether the software is distributed, hosted, or kept internal. This is the distinction most dependency scanners collapse.</p>
 ${verdictTable(runtime)}
 
-<h2>Obligations at a glance</h2>
+<h2>What obligations does ${esc(entry.id)} impose?</h2>
 <p>${obligationBadges(runtime.find((r) => r.obligations.length > 0)?.obligations ?? [])}</p>
 
 <div class="callout">
@@ -49,11 +83,13 @@ ${verdictTable(runtime)}
 
 ${
   linkageMatters
-    ? `<h2>Static linking changes the answer</h2>
+    ? `<h2>Does static linking change what ${esc(entry.id)} requires?</h2>
 <p>For compiled languages such as Go and Rust, dependencies are normally linked statically, which alters what ${esc(entry.id)} asks of you.</p>
 ${verdictTable(staticRows)}`
     : ''
 }
+
+${faqSection(faqs)}
 
 ${scanCta(`Want to know whether anything in your project is under ${entry.id}?`)}
 
@@ -75,19 +111,9 @@ ${LICENSE_CATALOG.filter((l) => l.id !== entry.id)
     description,
     path: `/license/${encodeURIComponent(entry.id)}`,
     body,
-    // 実際に投げられる問いの形で、答えを機械可読にする。
-    // 判定文は verdictMatrix の出力そのままで、ここで書き起こさない。
-    // 書き起こすと表と JSON-LD で違うことを言い始める。
-    jsonLd: faqJsonLd([
-      ...runtime.map((r) => ({
-        question: `Can I use ${entry.id} in ${MODEL_LABEL[r.model].toLowerCase()}?`,
-        answer: r.rationale,
-      })),
-      {
-        question: `Does ${entry.id} matter if it is only a build-time or dev dependency?`,
-        answer: dev.rationale,
-      },
-    ]),
+    // 本文の faqSection と同じ配列。判定文は verdictMatrix の出力そのままで、
+    // ここで書き起こさない。書き起こすと表と JSON-LD で違うことを言い始める
+    jsonLd: faqJsonLd(faqs),
   });
 }
 
@@ -140,5 +166,16 @@ ${scanCta('Rather than look them up one by one, check what your project actually
       'Reference for common open source licenses, grouped by how far their obligations reach — permissive, file-level and library-level copyleft, strong copyleft, network copyleft, and source-available.',
     path: '/licenses',
     body,
+    // 一覧はリンクの塊にしか見えない。何の一覧かを明示しないと薄いページ扱いになる
+    jsonLd: collectionJsonLd({
+      name: 'Open source licenses and what they require',
+      description:
+        'Every license covered here, grouped by how far its obligations reach, with the result for hosted SaaS, distribution, customer delivery, internal use, and published libraries.',
+      path: '/licenses',
+      items: LICENSE_CATALOG.map((l) => ({
+        name: `${l.id} — ${l.name}`,
+        path: `/license/${encodeURIComponent(l.id)}`,
+      })),
+    }),
   });
 }

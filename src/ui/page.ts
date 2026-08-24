@@ -1,4 +1,6 @@
-import { renderLayout } from './layout';
+import { faqJsonLd, faqSection, renderLayout, softwareAppJsonLd } from './layout';
+import { verdictMatrix } from '../policy/matrix';
+import type { DistributionModel } from '../types';
 
 const TOOL_STYLES = `
 label{display:block;font-weight:600;margin:20px 0 6px}
@@ -173,7 +175,46 @@ $('cta-submit').addEventListener('click', async () => {
 });
 `;
 
+/**
+ * トップページに出す問いと答え。
+ *
+ * 人が AI に投げるのは「AGPL は SaaS で使えるのか」であって、
+ * 「マニフェストを検査したい」ではない。**問いの側から入れる面を作る。**
+ *
+ * 答えは `verdictMatrix()` から取る。ここで書き起こすと、ツールの判定と
+ * トップページの記述が割れる。同じ問いに 2 つの答えを持たせない。
+ */
+function homeFaqs() {
+  const pick = (id: string, model: DistributionModel) =>
+    verdictMatrix(id, 'runtime').find((r) => r.model === model)!;
+
+  return [
+    {
+      question: 'Does the AGPL apply if I only host the software as a SaaS?',
+      answer: pick('AGPL-3.0-only', 'saas').rationale,
+    },
+    {
+      question: 'Does the GPL apply if I only host the software and never distribute it?',
+      answer: pick('GPL-3.0-only', 'saas').rationale,
+    },
+    {
+      question: 'Do build-time and dev dependencies create license obligations?',
+      answer: verdictMatrix('GPL-3.0-only', 'dev')[0]!.rationale,
+    },
+    {
+      question: 'Is MIT safe for commercial use?',
+      answer: pick('MIT', 'distributed-binary').rationale,
+    },
+    {
+      question: 'Why does the same license give different answers for different projects?',
+      answer:
+        'License obligations attach to events, not to code. The GPL attaches to distribution, so hosting triggers nothing and shipping a binary does. The AGPL adds an obligation that attaches to network interaction, so hosting triggers it. Until you say how the software reaches its users, no license name has a single correct answer.',
+    },
+  ];
+}
+
 export function renderPage(): string {
+  const faqs = homeFaqs();
   const body = `
 <style>${TOOL_STYLES}</style>
 
@@ -220,10 +261,12 @@ export function renderPage(): string {
   </div>
 </div>
 
-<h2>Why the shipping model decides it</h2>
+<h2>Why does the shipping model decide it?</h2>
 <p>AGPL-3.0 is the clearest case. Its section 13 obligation attaches when users interact with the software over a network, so a hosted SaaS triggers it while purely internal use does not. GPL works the opposite way: its obligations attach to distribution, so hosting is fine and shipping a binary is not. A scanner that reports "AGPL detected" without knowing which of these you are doing is telling you almost nothing.</p>
 <p>The same applies to build-time dependencies. A tool that never ends up in your artifact cannot impose distribution obligations on it, yet most scanners warn about them anyway &mdash; which is how teams learn to ignore the warnings.</p>
 <p><a href="/licenses">Browse license obligations &rarr;</a></p>
+
+${faqSection(faqs, 'Common license questions')}
 `;
 
   return renderLayout({
@@ -233,5 +276,8 @@ export function renderPage(): string {
     path: '/',
     body,
     script: SCRIPT,
+    // 何であるか（SoftwareApplication）と、何に答えるか（FAQPage）の両方。
+    // 前者が無いと候補に入らず、後者が無いと問いと結び付かない
+    jsonLd: softwareAppJsonLd() + faqJsonLd(faqs),
   });
 }
