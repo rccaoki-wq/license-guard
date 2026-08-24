@@ -6,3 +6,6 @@ dist/
 .tools/
 *.png
 dist/
+
+# 社外に出す文章の下書きと、投稿の段取り。製品の文書ではないので配布物に含めない
+docs/outreach/

@@ -12,7 +12,9 @@ Also listed on [Smithery](https://smithery.ai/servers/rcc-aoki/license-guard) an
 
 Generic license scanners answer a different question — "what license is this?" — and then warn on everything. LicenseGuard evaluates the license against your distribution model, so the same license produces different verdicts depending on how the software reaches its users.
 
-Live: **https://license-guard.rcc-aoki.workers.dev**
+Live: **https://licenseguard.tenchorooms.com**
+
+<sub>The `workers.dev` origin below is the same deployment, kept as the stable endpoint the MCP catalogs point at.</sub>
 
 ## Why does the distribution model decide it?
 
