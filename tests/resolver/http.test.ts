@@ -42,4 +42,20 @@ describe('fetchJson', () => {
     expect(UPSTREAM_TIMEOUT_MS).toBeLessThanOrEqual(10_000);
     expect(UPSTREAM_TIMEOUT_MS).toBeGreaterThan(0);
   });
+
+  it('呼び出しごとにタイムアウトを短くできる', async () => {
+    // 上流ごとに事情が違う。既定を全体に押し付けず、根拠のある側だけ縮める
+    const f = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise((resolve, reject) => {
+          const timer = setTimeout(() => resolve({ ok: true, json: async () => ({ a: 1 }) }), 200);
+          init?.signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new Error('aborted'));
+          });
+        }),
+    ) as unknown as typeof fetch;
+
+    expect(await fetchJson('https://x', f, 10)).toBeNull();
+  });
 });

@@ -1,5 +1,30 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchGoLicense, toGoCoordinates } from '../../src/resolver/clearlydefined';
+import {
+  CLEARLYDEFINED_TIMEOUT_MS,
+  fetchGoLicense,
+  toGoCoordinates,
+} from '../../src/resolver/clearlydefined';
+import { UPSTREAM_TIMEOUT_MS } from '../../src/resolver/http';
+
+/**
+ * ClearlyDefined だけ待ち時間を短くしている理由。
+ *
+ * 実測（実在の go.sum から取った固定版 120 件）では、
+ * **解決できる座標は必ず速い**（中央 1.0 秒 / p99 2.75 秒 / 最大 2.75 秒）。
+ * 一方 38% は 6 秒を過ぎても返らない。これは未収録の座標を要求された
+ * ClearlyDefined がその場で harvest を始めるためで、待っても答えは出ない。
+ *
+ * つまり 5 秒のうち後半は**必ず無駄**。ここを詰めた分だけ、同じ時間予算で
+ * 確認できる依存が増える。
+ */
+describe('ClearlyDefined の待ち時間', () => {
+  it('既定より短く、しかし解決できる座標を取りこぼさない', () => {
+    expect(CLEARLYDEFINED_TIMEOUT_MS).toBeLessThan(UPSTREAM_TIMEOUT_MS);
+    // 実測 p99 = 2751ms。ここを下回ると、解決できたはずの依存が
+    // 「未確認」に落ちる。安全側に倒れるとはいえ、答えが減るのは損失
+    expect(CLEARLYDEFINED_TIMEOUT_MS).toBeGreaterThanOrEqual(3_000);
+  });
+});
 
 function mockFetch(body: unknown, ok = true) {
   return vi.fn(async () => ({ ok, json: async () => body })) as unknown as typeof fetch;
