@@ -143,3 +143,57 @@ describe('scan', () => {
     expect(result.limitations.some((l) => l.includes('latest release'))).toBe(false);
   });
 });
+
+// 実物の go.sum（prometheus, 約390モジュール）で 180 秒待っても応答が返らなかった。
+// Go は「版一覧 → ClearlyDefined を候補ごと」で 1 依存あたり複数回 5 秒を踏みうる。
+// 同時 8 で最大 200 照会なら 25 バッチ直列になり、上流が遅い日は必ず溢れる。
+//
+// **ハングは最悪の結果**で、部分回答は既に正しく扱える経路がある。
+// 時間を使い切ったら、残りは未確認として返して必ず応答する。
+describe('scan の時間予算', () => {
+  const slowFetchers = (delayMs: number) => {
+    const look = async () => {
+      await new Promise((r) => setTimeout(r, delayMs));
+      return { spdx: 'MIT' };
+    };
+    return { npm: look, pypi: look, go: look, cargo: look };
+  };
+
+  const manyDeps = (n: number) =>
+    JSON.stringify({
+      dependencies: Object.fromEntries(
+        Array.from({ length: n }, (_, i) => [`pkg-${i}`, '1.0.0']),
+      ),
+    });
+
+  it('上流が遅くても予算内に応答する', async () => {
+    const started = Date.now();
+    const result = await scan(manyDeps(160), 'saas', noopCache(), slowFetchers(30), 200);
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result.findings).toHaveLength(160);
+  });
+
+  it('打ち切った分は解決済みだと偽らず、未確認として返す', async () => {
+    const result = await scan(manyDeps(160), 'saas', noopCache(), slowFetchers(30), 200);
+    const unchecked = result.findings.filter((f) => f.resolvedFrom === 'not-checked');
+    expect(unchecked.length).toBeGreaterThan(0);
+    // 未確認を allowed に混ぜると、確認していないものを安全だと言うことになる
+    expect(unchecked.every((f) => f.verdict !== 'allowed')).toBe(true);
+    expect(result.limitations.some((l) => l.includes('not checked'))).toBe(true);
+  });
+
+  // バッチの手前でしか打ち切らないと、締切の直前に始まったバッチが
+   // まるごと走り切る。実際に詰まるのはまさにその1バッチなので、
+  // 「締切 + 上流タイムアウト」まで伸びてしまい保証にならない。
+  it('締切をまたいで止まっている照会を待ち続けない', async () => {
+    const started = Date.now();
+    const result = await scan(manyDeps(8), 'saas', noopCache(), slowFetchers(3000), 200);
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(result.findings.every((f) => f.resolvedFrom === 'not-checked')).toBe(true);
+  });
+
+  it('予算が足りていれば全件解決する（早すぎる打ち切りをしない）', async () => {
+    const result = await scan(manyDeps(24), 'saas', noopCache(), slowFetchers(1), 10_000);
+    expect(result.findings.every((f) => f.resolvedFrom !== 'not-checked')).toBe(true);
+  });
+});

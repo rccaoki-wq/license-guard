@@ -50,6 +50,26 @@ const SOURCE: Record<Ecosystem, ResolvedFrom> = {
   cargo: 'registry',
 };
 
+/**
+ * 期限までに終わらなければ「未確認」として返す。**中身は捨てない**
+ * ——遅れて届いた解決はキャッシュに入るので、次のスキャンが速くなる。
+ */
+function withCutoff(p: Promise<Resolution>, ms: number): Promise<Resolution> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve({ spdx: null, resolvedFrom: 'not-checked' }), ms);
+    p.then(
+      (r) => {
+        clearTimeout(t);
+        resolve(r);
+      },
+      () => {
+        clearTimeout(t);
+        resolve({ spdx: null, resolvedFrom: 'unresolved' });
+      },
+    );
+  });
+}
+
 const RESOLVED_FROM_VALUES: readonly ResolvedFrom[] = [
   'lockfile',
   'registry',
@@ -104,12 +124,34 @@ export class LicenseResolver {
     return { spdx: lookup.spdx, resolvedFrom: source };
   }
 
-  async resolveAll(deps: Dependency[]): Promise<Resolution[]> {
+  /**
+   * `deadline`（epoch ミリ秒）を過ぎたら、残りは照会せず未確認として返す。
+   *
+   * 件数の上限（MAX_LOOKUPS）は費用は抑えるが**時間は抑えない**。
+   * 同時 CONCURRENCY 件の直列バッチなので、上流が遅い日は
+   * 「1件あたりの上限 × バッチ数」まで伸びる。実際、実物の go.sum で
+   * 3 分待っても応答が返らなかった。**応答しないのが最悪の結果**で、
+   * 一部未確認は既に正しく表示できる（NOT_CHECKED_RESULT）。
+   */
+  async resolveAll(deps: Dependency[], deadline?: number): Promise<Resolution[]> {
     const out: Resolution[] = new Array(deps.length);
 
     for (let i = 0; i < deps.length; i += CONCURRENCY) {
+      const left = deadline === undefined ? Infinity : deadline - Date.now();
+      if (left <= 0) {
+        for (let j = i; j < deps.length; j++) {
+          out[j] = { spdx: null, resolvedFrom: 'not-checked' };
+        }
+        break;
+      }
+
       const batch = deps.slice(i, i + CONCURRENCY);
-      const results = await Promise.all(batch.map((d) => this.resolve(d)));
+      // バッチの手前だけで見ると、締切の直前に始まった 1 バッチが丸ごと
+      // 走り切る。詰まるのはまさにその 1 バッチなので、残り時間で
+      // 打ち切らないと「締切 + 上流タイムアウト」まで伸びて保証にならない。
+      const results = await Promise.all(
+        batch.map((d) => (left === Infinity ? this.resolve(d) : withCutoff(this.resolve(d), left))),
+      );
       results.forEach((r, j) => {
         out[i + j] = r;
       });

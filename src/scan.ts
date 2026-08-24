@@ -43,8 +43,19 @@ const NOT_CHECKED_RESULT: PolicyResult = {
   verdict: 'review',
   obligations: [],
   rationale:
-    'This dependency was not checked. The request reached the limit on how many registry lookups one scan may perform. Scanning the same project again will cover more of it, because each scan adds what it resolved to a cache shared by everyone.',
+    'This dependency was not checked. The scan reached its limit on how much one request may look up. Scanning the same project again will cover more of it, because each scan adds what it resolved to a cache shared by everyone.',
 };
+
+/**
+ * 1 リクエストが上流の照会に使ってよい実時間。
+ *
+ * 件数の上限だけでは足りない。実物の go.sum（約390モジュール）で
+ * 3 分待っても応答が返らなかった。Go は「版一覧 → 候補ごとの
+ * ClearlyDefined」で 1 依存に複数回タイムアウトを踏みうるため、
+ * 直列バッチの合計はどこまでも伸びる。**返らないページは、
+ * 不完全なページよりはるかに悪い。**
+ */
+export const SCAN_BUDGET_MS = 20_000;
 
 const UNRESOLVED_RESULT: PolicyResult = {
   verdict: 'review',
@@ -103,7 +114,9 @@ function limitationsFor(ecosystem: Ecosystem, findings: Finding[], transitive: b
   const notChecked = findings.filter((f) => f.resolvedFrom === 'not-checked').length;
   if (notChecked > 0) {
     out.unshift(
-      `${notChecked} dependencies were not checked because this scan reached its registry lookup limit. They are listed as needing review, not as clear. Scanning again will cover more of them.`,
+      // 打ち切りの理由は件数上限と時間切れの両方がありうる。片方だけを
+      // 名指しすると、もう片方のときに嘘になる
+      `${notChecked} dependencies were not checked because this scan reached its lookup limit. They are listed as needing review, not as clear. Scanning again will cover more of them, since each scan warms a shared cache.`,
     );
   }
 
@@ -124,7 +137,9 @@ export async function scan(
   distributionModel: DistributionModel,
   cache: CacheLike,
   fetchers: Fetchers = defaultFetchers,
+  budgetMs: number = SCAN_BUDGET_MS,
 ): Promise<ScanResult> {
+  const deadline = Date.now() + budgetMs;
   const parsed = detectAndParse(content);
 
   // 上限は「解析した依存の数」ではなく「実際に上流へ問い合わせる数」に掛ける。
@@ -155,7 +170,7 @@ export async function scan(
   });
 
   const resolver = new LicenseResolver(cache, fetchers);
-  const resolved = await resolver.resolveAll(toResolve);
+  const resolved = await resolver.resolveAll(toResolve, deadline);
 
   // 元の並び順に戻す
   const resolutions: Array<(typeof resolved)[number]> = [];
