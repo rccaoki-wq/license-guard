@@ -25,6 +25,7 @@
     "build:stdio": "esbuild src/local/stdio.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/stdio.mjs",
     "e2e:stdio": "node e2e/stdio.spec.mjs",
     "signals": "node scripts/signals.mjs",
+    "verify:live": "tsx scripts/verify-live.mjs",
     "indexnow": "node --experimental-strip-types scripts/indexnow.mjs",
     "predeploy": "npm run typecheck && npm test"
   },

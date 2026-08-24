@@ -33,22 +33,13 @@ border-radius:8px;background:var(--card);color:var(--fg);font:inherit}
 `;
 
 const SCRIPT = `
-const sid = (crypto.randomUUID && crypto.randomUUID()) || String(Math.random()).slice(2);
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-function track(name) {
-  fetch('/api/track', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name, sessionId: sid }),
-  }).catch(() => {});
-}
-
-// 到達を記録する。これが無いと「誰も来ていない」と「来たが何もせず帰った」を
-// 区別できない。この2つは打ち手が正反対（流入を作る / 入口を直す）なので、
-// 区別できないままでは判断のしようがなかった。
-track('landed');
+// 到達とセッション ID はレイアウトのビーコンが担う。
+// ここで別に採ると同じ訪問者が2セッションに割れ、到達と判定完了が
+// 突き合わなくなる（率の分母と分子が別人になる）。
+const track = window.__lgTrack;
 
 const LABEL = { allowed: 'No obligation', review: 'Needs review', blocked: 'Obligation triggered' };
 

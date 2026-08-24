@@ -131,6 +131,25 @@ export function faqJsonLd(entries: FaqEntry[]): string {
   return `<script type="application/ld+json">${json}</script>`;
 }
 
+/**
+ * 到達ビーコン。**すべてのページに入れる。**
+ *
+ * 以前はツールページ用の `script` に相乗りしていたので、渡していた
+ * トップページ以外は何も記録していなかった。検索向けに 874 枚を用意して、
+ * そこへの着地は 1 件も数えていない状態だった。到達の集計を
+ * 「トップに来た人数」と読み違えていたのはこれが原因。
+ *
+ * ページごとに書き足す方式は同じ抜けをまた作るので、レイアウトに置く。
+ * セッション ID もここで一度だけ決め、ツールページ側は
+ * `window.__lgTrack` を使い回す（別々に採ると同じ訪問者が
+ * 2 セッションに割れて、到達と判定完了が突き合わなくなる）。
+ */
+const BEACON = `
+window.__lgSid=(crypto.randomUUID&&crypto.randomUUID())||String(Math.random()).slice(2);
+window.__lgTrack=function(n){fetch('/api/track',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:n,sessionId:window.__lgSid})}).catch(function(){})};
+window.__lgTrack('landed');
+`.trim();
+
 export interface LayoutOptions {
   title: string;
   description: string;
@@ -175,6 +194,7 @@ ${o.body}
 ${DISCLAIMER_HTML}
 ${LISTINGS_HTML}
 </div>
+<script>${BEACON}</script>
 ${o.script ? `<script>${o.script}</script>` : ''}
 </body>
 </html>`;

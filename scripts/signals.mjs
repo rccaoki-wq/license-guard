@@ -163,6 +163,61 @@ console.log('\n' + diagnoseWeb({ humans, humanScanned, landed }).message);
 const [webNull] = q('SELECT COUNT(*) n FROM events WHERE synthetic IS NULL');
 if (webNull.n > 0) console.log(`\n帰属不能（計測前）     ${webNull.n} 行を除外済み`);
 
+// ---------------------------------------------------------------- ページ到達
+
+h('ページ到達（サーバ側計測）');
+
+// なぜ別立てか。上の funnel はブラウザのビーコン（セッション単位）で、
+// **長らくトップページにしか入っていなかった**。検索向けの 874 枚は
+// 1 件も数えていなかったので、「到達 14 件」はサイト全体の数字ではなく
+// トップに来た人数だった。ここはサーバ側で全ページを数える。
+//
+// エッジのキャッシュで数え落とさないことは実測で確かめた（同一 URL への
+// 連続 5 回がすべて記録され、cf-cache-status も付かない）。ただしブラウザ側の
+// max-age=3600 の分は届かない。**人数ではなくのべ回数**で、少なめに出る。
+let views = [];
+try {
+  views = q(
+    'SELECT page, client_kind kind, source, SUM(hits) hits FROM page_views WHERE synthetic = 0 GROUP BY page, client_kind, source',
+  );
+} catch {
+  console.log('page_views テーブルがまだありません（migration 0006 未適用）。');
+}
+
+if (views.length === 0) {
+  console.log('まだ記録がありません。計測を入れた時点より後の到達だけが貯まります。');
+} else {
+  const sum = (f) => views.filter(f).reduce((a, r) => a + r.hits, 0);
+  const humanHits = sum((r) => r.kind === 'browser');
+
+  console.log(`到達（のべ）           ${sum(() => true)}`);
+  console.log(`  ブラウザ             ${humanHits}`);
+  console.log(`  ボット               ${sum((r) => r.kind === 'bot')}   ← 索引されている証拠`);
+  console.log(`  判別できず           ${sum((r) => r.kind === 'unknown')}`);
+
+  // 検索から人が来ているかどうかが、874 枚を作った投資の答え合わせになる
+  console.log('\n人間の参照元:');
+  for (const s of ['search', 'ai', 'social', 'other', 'direct', 'internal']) {
+    const n = sum((r) => r.kind === 'browser' && r.source === s);
+    if (n > 0) console.log(`  ${s.padEnd(9)} ${n}`);
+  }
+  if (humanHits === 0) console.log('  （まだ 0）');
+
+  const top = [...new Set(views.map((r) => r.page))]
+    .map((p) => ({
+      page: p,
+      human: sum((r) => r.page === p && r.kind === 'browser'),
+      bot: sum((r) => r.page === p && r.kind === 'bot'),
+    }))
+    .sort((a, b) => b.human - a.human || b.bot - a.bot)
+    .slice(0, 15);
+
+  console.log('\nページ別（上位15）:      人  ボット');
+  for (const t of top) {
+    console.log(`  ${t.page.padEnd(28)} ${String(t.human).padStart(3)}  ${String(t.bot).padStart(5)}`);
+  }
+}
+
 // ---------------------------------------------------------------- 関心表明
 
 h('関心表明（連絡先）');

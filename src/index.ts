@@ -15,6 +15,7 @@ import { createD1Recorder, isSyntheticRequest } from './mcp/telemetry';
 import { enforceRateLimit, type RateLimitBinding } from './ratelimit';
 import { isPlausibleEmail, normalizeEmail } from './interest';
 import { classifyClient } from './client-kind';
+import { buildPageView, recordPageView } from './page-views';
 import { evaluateExpression } from './policy/engine';
 import { packagePath } from './ui/pkg';
 import { SITE_ORIGIN } from './ui/layout';
@@ -32,6 +33,45 @@ type Env = {
 };
 
 const app = new Hono<Env>();
+
+/**
+ * ページ到達をサーバ側で数える。
+ *
+ * ここに置く理由。到達計測はレイアウトの任意 script として渡す作りで、
+ * 渡していたのはトップページだけだった。検索向けの 874 枚は 1 件も
+ * 記録されておらず、「人間の到達 3 件」は実際には「トップに来た 3 人」
+ * でしかなかった。ページごとに書き足す方式は同じ抜けをまた作るので、
+ * 経路に置いて個別のページの都合から外す。
+ *
+ * 応答は絶対に止めない。計測はレスポンスを返した後に waitUntil で流す。
+ */
+app.use('*', async (c, next) => {
+  await next();
+  try {
+    const row = buildPageView(
+      {
+        path: c.req.path,
+        status: c.res.status,
+        contentType: c.res.headers.get('content-type'),
+      },
+      {
+        userAgent: c.req.header('user-agent'),
+        referer: c.req.header('referer') ?? c.req.header('referrer'),
+        synthetic: isSyntheticRequest(c.req.raw.headers),
+      },
+      new URL(c.req.url).hostname,
+      Date.now(),
+    );
+    if (!row) return;
+
+    const write = recordPageView(c.env.DB, row).catch(() => {});
+    const later = safeWaitUntil(c);
+    if (later) later(write);
+    else await write;
+  } catch {
+    // 計測の失敗をページの失敗にしない
+  }
+});
 
 /**
  * 本文サイズの上限。
