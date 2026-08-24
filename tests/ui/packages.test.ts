@@ -37,6 +37,20 @@ describe('renderPackageIndex', () => {
     expect(html).toContain('<meta name="description"');
   });
 
+  // 「結論が変わるから載せた」と書いた直後に「0 件で変わる」と出ていた。
+  // 選定はリンク方式込みで判定し、件数はリンク方式抜きで数えていたのが原因。
+  it('「0 of the 5」と書かない（載せた理由と矛盾する）', () => {
+    const html = renderPackageIndex(PACKAGES);
+    expect(html).not.toContain('0 of the 5');
+  });
+
+  it('リンク方式で結論が変わるものは、その理由を書く', () => {
+    // npm は動的リンクが既定なので、LGPL は既定では義務が出ない。
+    // 件数だけ出すと「載せる意味が無いもの」に見える
+    const html = renderPackageIndex([{ ecosystem: 'npm', name: 'p5', spdx: 'LGPL-2.1-only' }]);
+    expect(html).toMatch(/link|linked|linking/i);
+  });
+
   it('エコシステムごとにまとめる', () => {
     const html = renderPackageIndex(PACKAGES);
     expect(html).toContain('npm');

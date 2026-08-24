@@ -12,15 +12,33 @@
  */
 import { verdictMatrix } from '../policy/matrix';
 import { packagePageSaysSomething, type SitemapPackage } from '../seo/sitemap';
-import { ECOSYSTEM_LABEL, packagePath } from './pkg';
+import { DEFAULT_LINKAGE, ECOSYSTEM_LABEL, packagePath } from './pkg';
 import { collectionJsonLd, esc, renderLayout, scanCta } from './layout';
 import type { Ecosystem } from '../types';
 
 const ECOSYSTEM_ORDER: Ecosystem[] = ['npm', 'pypi', 'go', 'cargo'];
 
-/** その SPDX が 5 つの配布モデルのうち何件で義務を生むか */
-function affectedModels(spdx: string): number {
-  return verdictMatrix(spdx).filter((r) => r.verdict !== 'allowed').length;
+/**
+ * 一覧に出す一行。
+ *
+ * **件数は必ずそのエコシステムの既定リンク方式で数える。** 掲載の可否は
+ * 静的・動的の両方を見て決めているので、既定を無視して数えると
+ * LGPL の npm パッケージが「0 of the 5」と出る。載せた理由と正面から
+ * 矛盾する表示だったので、数が 0 になる場合は件数ではなく
+ * **何が結論を分けているのか**（リンク方式）を書く。
+ */
+function reason(ecosystem: Ecosystem, spdx: string): string {
+  const linkage = DEFAULT_LINKAGE[ecosystem];
+  const rows = verdictMatrix(spdx, 'runtime', linkage);
+  const n = rows.filter((r) => r.verdict !== 'allowed').length;
+
+  if (n > 0) {
+    return `${spdx}, which applies in ${n} of the ${rows.length} shipping models.`;
+  }
+  // 既定のリンク方式では義務が出ないが、もう一方では出る
+  return linkage === 'dynamic'
+    ? `${spdx}. Nothing is triggered while it is linked dynamically, which is how ${ECOSYSTEM_LABEL[ecosystem]} normally loads it — statically linking or bundling it is a different answer.`
+    : `${spdx}. The obligations here turn on how it is linked rather than on how you ship.`;
 }
 
 function dedupe(packages: SitemapPackage[]): SitemapPackage[] {
@@ -43,10 +61,10 @@ export function renderPackageIndex(packages: SitemapPackage[]): string {
     const items = listed.filter((p) => p.ecosystem === eco);
     if (items.length === 0) return '';
     const rows = items
-      .map((p) => {
-        const n = affectedModels(p.spdx);
-        return `<li><a href="${packagePath(p.ecosystem, p.name)}"><code>${esc(p.name)}</code></a> &mdash; ${esc(p.spdx)}, which applies in ${n} of the 5 shipping models.</li>`;
-      })
+      .map(
+        (p) =>
+          `<li><a href="${packagePath(p.ecosystem, p.name)}"><code>${esc(p.name)}</code></a> &mdash; ${esc(reason(p.ecosystem, p.spdx))}</li>`,
+      )
       .join('\n');
     return `<h2>${esc(ECOSYSTEM_LABEL[eco])}</h2>\n<ul>\n${rows}\n</ul>`;
   })

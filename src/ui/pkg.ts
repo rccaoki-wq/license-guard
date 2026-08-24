@@ -27,7 +27,7 @@ const MANIFEST_NAME: Record<Ecosystem, string> = {
 };
 
 /** Go / Rust は静的リンクが既定 */
-const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
+export const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
   npm: 'dynamic',
   pypi: 'dynamic',
   go: 'static',
