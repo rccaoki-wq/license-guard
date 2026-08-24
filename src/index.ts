@@ -457,7 +457,12 @@ app.post('/api/scan', async (c) => {
   }
 
   if (!DISTRIBUTION_MODELS.includes(distributionModel as DistributionModel)) {
-    return c.json({ error: 'Unknown distribution model.' }, 400);
+    // 有効な値を挙げずに拒否すると、当てるまで叩かせることになる。
+    // 同じ検証が 231 行目では既に列挙していた
+    return c.json(
+      { error: `Unknown distribution model. Must be one of: ${DISTRIBUTION_MODELS.join(', ')}` },
+      400,
+    );
   }
 
   const cache = new LicenseCache(c.env.DB);

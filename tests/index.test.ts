@@ -69,6 +69,11 @@ describe('app', () => {
       env,
     );
     expect(res.status).toBe(400);
+    // 有効な値を挙げずに拒否すると、当てるまで叩かせることになる。
+    // 実際に自分で `binary` と書いて詰まった
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('distributed-binary');
+    expect(body.error).toContain('internal-only');
   });
 
   it('POST /api/scan はパース不能な入力で 400 とメッセージを返す', async () => {
