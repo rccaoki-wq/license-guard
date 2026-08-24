@@ -14,7 +14,7 @@ Generic license scanners answer a different question — "what license is this?"
 
 Live: **https://license-guard.rcc-aoki.workers.dev**
 
-## Why the distribution model decides it
+## Why does the distribution model decide it?
 
 | How you ship | AGPL-3.0 dependency |
 |---|---|
@@ -33,6 +33,26 @@ The same split runs through the rest of the license landscape, and the distincti
 - **LGPL** is the one that actually depends on linkage: static linking carries a relinking obligation, dynamic linking does not.
 
 Verdicts are stated as facts with the clause cited. LicenseGuard does not tell you what to do.
+
+## Common questions
+
+**Does the GPL apply if I only host the software and never distribute it?**
+No. GPL-3.0 triggers its obligations on distribution. Hosted SaaS is not distribution, so no obligation arises *today* — but shipping the same software later, as an on-prem deployment, a binary, or a published library, would trigger whole-work source disclosure.
+
+**Does the AGPL apply if I only host the software as a SaaS?**
+Yes. AGPL-3.0 §13 requires that users interacting with a modified version over a network be offered the corresponding source of the whole work. This is the clause that makes AGPL behave differently from GPL for hosted services, and it is the entire practical difference between the two.
+
+**Do build-time and dev dependencies create license obligations?**
+No. A dev dependency is not part of the artifact you ship, so distribution-triggered obligations do not arise. Tools that *emit code into your output*, such as code generators, are a separate case worth checking individually.
+
+**Is MIT safe for commercial use?**
+Yes, in every distribution model. MIT asks for attribution and nothing more. Apache-2.0 reaches the same result while adding a patent grant and a NOTICE requirement — obligations, but ones that do not vary by how you ship.
+
+**Does static linking change the answer?**
+Only for LGPL, and only for compiled languages. LGPL's design is that you may use the library in a proprietary work provided the user can replace it, which dynamic linking gives you and static linking does not. Go and Rust link statically by default, and nothing in `Cargo.lock` or `go.sum` says so.
+
+**Why does the same license give different answers for different projects?**
+Because copyleft obligations attach to *events* — distributing, or letting users interact over a network — not to the presence of the code. Whether those events happen is a fact about your business, not about your repository, which is why a scanner that only reads your lockfile cannot decide it.
 
 ## Use it from your coding agent
 
