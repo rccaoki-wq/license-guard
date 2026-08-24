@@ -168,7 +168,7 @@ describe('SEO ルート', () => {
     expect(await res.text()).toContain('<urlset');
   });
 
-  it('GET /sitemap.xml は DB 障害時もシードで応答する', async () => {
+  it('GET /sitemap.xml は DB 障害時も静的ページで応答する', async () => {
     const env = {
       DB: {
         prepare() {
@@ -182,7 +182,9 @@ describe('SEO ルート', () => {
     };
     const res = await app.request('/sitemap.xml', {}, env);
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain('/pkg/npm/express');
+    const xml = await res.text();
+    expect(xml).toContain('/license/AGPL-3.0-only');
+    expect(xml).not.toContain('/pkg/');
   });
 
   it('GET /pkg/:eco/:name は未知エコシステムで 404', async () => {

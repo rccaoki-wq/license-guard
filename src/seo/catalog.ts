@@ -145,18 +145,5 @@ export function findLicense(id: string): LicenseEntry | undefined {
   return LICENSE_CATALOG.find((l) => l.id.toLowerCase() === key);
 }
 
-/**
- * sitemap の初期シード。
- * license_cache が育つまでの間、クロール対象を確保するために使う。
- */
-export const SEED_PACKAGES: Array<{ ecosystem: Ecosystem; name: string }> = [
-  ...['express', 'react', 'lodash', 'axios', 'next', 'vue', 'typescript', 'webpack', 'eslint', 'jest', 'chalk', 'commander', 'moment', 'dotenv', 'zod', 'prisma', 'tailwindcss', 'vite', 'hono', 'socket.io'].map(
-    (name) => ({ ecosystem: 'npm' as const, name }),
-  ),
-  ...['requests', 'flask', 'django', 'numpy', 'pandas', 'fastapi', 'pydantic', 'sqlalchemy', 'celery', 'pillow', 'boto3', 'scrapy', 'pytest', 'click', 'rich'].map(
-    (name) => ({ ecosystem: 'pypi' as const, name }),
-  ),
-  ...['github.com/gin-gonic/gin', 'github.com/spf13/cobra', 'github.com/stretchr/testify', 'github.com/sirupsen/logrus', 'gorm.io/gorm'].map(
-    (name) => ({ ecosystem: 'go' as const, name }),
-  ),
-];
+// SEED_PACKAGES（express, react, requests …）は削除した。
+// すべて許容ライセンスなので、sitemap のフィルタを通ると1件も残らない。

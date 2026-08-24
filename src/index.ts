@@ -357,16 +357,17 @@ app.get('/sitemap.xml', async (c) => {
   let packages: SitemapPackage[] = [];
   try {
     // 解決実績のあるパッケージのみ載せる。ページに中身があることが保証されるため。
+    // spdx も引くのは、結論が配布モデルで変わるものだけに絞るため（buildSitemap 側で判定）。
     const rows = await c.env.DB.prepare(
-      `SELECT DISTINCT ecosystem, package FROM license_cache
+      `SELECT DISTINCT ecosystem, package, spdx FROM license_cache
        WHERE spdx IS NOT NULL ORDER BY package LIMIT 45000`,
-    ).all<{ ecosystem: string; package: string }>();
+    ).all<{ ecosystem: string; package: string; spdx: string }>();
 
     packages = (rows.results ?? [])
-      .filter((r): r is { ecosystem: Ecosystem; package: string } =>
+      .filter((r): r is { ecosystem: Ecosystem; package: string; spdx: string } =>
         ECOSYSTEMS.includes(r.ecosystem as Ecosystem),
       )
-      .map((r) => ({ ecosystem: r.ecosystem, name: r.package }));
+      .map((r) => ({ ecosystem: r.ecosystem, name: r.package, spdx: r.spdx }));
   } catch {
     // DB 障害時もシードのみで sitemap を返す
   }

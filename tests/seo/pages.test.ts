@@ -140,14 +140,40 @@ describe('buildSitemap', () => {
     expect(xml).toContain('/license/AGPL-3.0-only');
   });
 
-  it('渡されたパッケージを含む', () => {
-    const xml = buildSitemap([{ ecosystem: 'npm', name: 'left-pad' }]);
+  it('配布モデルで結論が変わるパッケージを含む', () => {
+    const xml = buildSitemap([{ ecosystem: 'npm', name: 'left-pad', spdx: 'AGPL-3.0-only' }]);
     expect(xml).toContain('/pkg/npm/left-pad');
   });
 
-  it('シードと重複するパッケージを二重に出さない', () => {
-    const xml = buildSitemap([{ ecosystem: 'npm', name: 'express' }]);
-    const count = xml.split('/pkg/npm/express<').length - 1;
+  // 許容ライセンスのパッケージページは、名前以外がライセンスページの言い直しになる。
+  // 843件そういうページを自分から提出すると、サイト全体が薄いと判断される。
+  it('どの配布モデルでも結論が同じパッケージは載せない', () => {
+    const xml = buildSitemap([
+      { ecosystem: 'npm', name: 'left-pad', spdx: 'MIT' },
+      { ecosystem: 'npm', name: 'glob-parent', spdx: 'ISC' },
+      { ecosystem: 'pypi', name: 'requests', spdx: 'Apache-2.0' },
+    ]);
+    expect(xml).not.toContain('/pkg/npm/left-pad');
+    expect(xml).not.toContain('/pkg/npm/glob-parent');
+    expect(xml).not.toContain('/pkg/pypi/requests');
+  });
+
+  it('リンク方式で結論が変わる LGPL は載せる', () => {
+    const xml = buildSitemap([{ ecosystem: 'npm', name: 'somelib', spdx: 'LGPL-3.0-only' }]);
+    expect(xml).toContain('/pkg/npm/somelib');
+  });
+
+  it('解釈できないライセンスは載せない', () => {
+    const xml = buildSitemap([{ ecosystem: 'npm', name: 'weird', spdx: 'NOT-A-LICENSE' }]);
+    expect(xml).not.toContain('/pkg/npm/weird');
+  });
+
+  it('同じパッケージを二重に出さない', () => {
+    const xml = buildSitemap([
+      { ecosystem: 'npm', name: 'ghostscript', spdx: 'AGPL-3.0-only' },
+      { ecosystem: 'npm', name: 'ghostscript', spdx: 'AGPL-3.0-only' },
+    ]);
+    const count = xml.split('/pkg/npm/ghostscript<').length - 1;
     expect(count).toBe(1);
   });
 

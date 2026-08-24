@@ -1,7 +1,8 @@
-import { LICENSE_CATALOG, SEED_PACKAGES } from './catalog';
+import { LICENSE_CATALOG } from './catalog';
 import { packagePath } from '../ui/pkg';
 import { COMPARE_PAIRS, comparePath } from '../ui/compare';
 import { SITE_ORIGIN } from '../ui/layout';
+import { verdictMatrix } from '../policy/matrix';
 import type { Ecosystem } from '../types';
 
 /** sitemap 1ファイルあたりの URL 上限 */
@@ -10,6 +11,24 @@ const MAX_URLS = 50_000;
 export interface SitemapPackage {
   ecosystem: Ecosystem;
   name: string;
+  spdx: string;
+}
+
+/**
+ * そのパッケージページが、ライセンスページの言い直し以上のことを言うか。
+ *
+ * 許容ライセンスは配布モデルでもリンク方式でも結論が変わらないので、
+ * パッケージページの中身は名前を除いてライセンスページと同じになる。
+ * そういうページを何百件も自分から提出すると、サイト全体が薄いと見なされる。
+ * ページ自体は消さない（リンクから来た人には答えを返す）。提出をやめるだけ。
+ */
+export function packagePageSaysSomething(spdx: string): boolean {
+  const verdicts = new Set(
+    [...verdictMatrix(spdx, 'runtime', 'dynamic'), ...verdictMatrix(spdx, 'runtime', 'static')].map(
+      (r) => r.verdict,
+    ),
+  );
+  return verdicts.size > 1;
 }
 
 function xmlEscape(s: string): string {
@@ -22,9 +41,8 @@ function xmlEscape(s: string): string {
 /**
  * sitemap.xml を組み立てる。
  *
- * 静的ページとライセンスページに加え、これまでに解決実績のあるパッケージを
- * 載せる。パッケージページは要求時に生成されるが、実績があるということは
- * ライセンスを解決できたということなので、中身のあるページになることが保証される。
+ * 静的ページとライセンスページに加え、解決実績があり、かつ
+ * ライセンスページには無い答えを持つパッケージだけを載せる。
  */
 export function buildSitemap(packages: SitemapPackage[]): string {
   const paths = [
@@ -35,11 +53,11 @@ export function buildSitemap(packages: SitemapPackage[]): string {
     ...COMPARE_PAIRS.map(comparePath),
   ];
 
-  // 実績のあるパッケージを優先し、枠が余ればシードで埋める
   const seen = new Set<string>();
   const pkgPaths: string[] = [];
 
-  for (const p of [...packages, ...SEED_PACKAGES]) {
+  for (const p of packages) {
+    if (!packagePageSaysSomething(p.spdx)) continue;
     const path = packagePath(p.ecosystem, p.name);
     if (seen.has(path)) continue;
     seen.add(path);
