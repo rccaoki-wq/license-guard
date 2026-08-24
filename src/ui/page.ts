@@ -99,6 +99,19 @@ $('run').addEventListener('click', async () => {
   btn.textContent = 'Checking...';
   track('scan_submitted');
 
+  // 大きな go.sum は上流の照会が律速で 20 秒近くかかる。無言で止まって
+  // 見えると「壊れている」と判断されて離脱するので、経過と理由を出す。
+  var t0 = Date.now();
+  var ticker = setInterval(function () {
+    var s = Math.round((Date.now() - t0) / 1000);
+    if (s >= 3) btn.textContent = 'Checking... ' + s + 's';
+    if (s >= 6) {
+      $('progress').textContent =
+        'Still going. Licenses for this ecosystem are fetched from public registries one package at a time, so large lockfiles take up to about 20 seconds.';
+      $('progress').classList.remove('hidden');
+    }
+  }, 1000);
+
   try {
     const res = await fetch('/api/scan', {
       method: 'POST',
@@ -126,6 +139,18 @@ $('run').addEventListener('click', async () => {
     $('limits').innerHTML = '<strong>Limits of this result</strong><ul>' +
       data.limitations.map((l) => '<li>' + esc(l) + '</li>').join('') + '</ul>';
 
+    // 打ち切られた件数は要約のすぐ下に出す。下まで読ませてはいけない
+    var notChecked = data.findings.filter((f) => f.resolvedFrom === 'not-checked').length;
+    if (notChecked > 0) {
+      $('notice').innerHTML = '<strong>' + notChecked + ' of ' + data.summary.total +
+        ' dependencies were not checked.</strong> This scan reached its lookup limit, so those are' +
+        ' listed as needing review rather than as clear. Running it again covers more, because each' +
+        ' scan warms a cache shared by everyone.';
+      $('notice').classList.remove('hidden');
+    } else {
+      $('notice').classList.add('hidden');
+    }
+
     lastVerdictMix = 'blocked=' + data.summary.blocked + ',review=' + data.summary.review +
       ',allowed=' + data.summary.allowed;
 
@@ -136,6 +161,8 @@ $('run').addEventListener('click', async () => {
     $('error').classList.remove('hidden');
     track('scan_failed');
   } finally {
+    clearInterval(ticker);
+    $('progress').classList.add('hidden');
     btn.disabled = false;
     btn.textContent = 'Check licenses';
   }
@@ -238,9 +265,14 @@ export function renderPage(): string {
 <p style="margin-top:18px"><button class="btn" id="run">Check licenses</button>
 <a href="#" id="example" style="margin-left:14px">Or see it on an example</a></p>
 <p id="error" class="err hidden"></p>
+<p id="progress" class="hint hidden"></p>
 
 <div id="result" class="hidden">
   <div class="summary" id="summary"></div>
+  <!-- 打ち切りの告知は要約の直後に出す。limits は findings の後ろにあり、
+       依存が数百件あると誰も辿り着かない。不完全なスキャンが
+       「問題なし」に見えるのは、この製品で最も避けたい失敗 -->
+  <div id="notice" class="limits hidden"></div>
   <div id="findings"></div>
   <div class="limits" id="limits"></div>
   <div class="cta">
