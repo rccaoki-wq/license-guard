@@ -18,11 +18,13 @@
  */
 import { classifyPath, classifySource, isTrackablePath, type Source } from './page-class';
 import { classifyClient } from './client-kind';
+import { classifyBot, type BotName } from './bot-name';
 
 export type PageViewRow = {
   day: string;
   page: string;
   clientKind: string;
+  bot: BotName;
   source: Source;
   synthetic: 0 | 1;
 };
@@ -46,23 +48,27 @@ export function buildPageView(
   if (!/^(text\/html|text\/markdown)/i.test(req.contentType ?? '')) return null;
   if (!isTrackablePath(req.path)) return null;
 
+  // 生の User-Agent は保存しない。bot/browser/unknown の別だけ
+  const clientKind = classifyClient(headers.userAgent);
+
   return {
     day: utcDay(at),
     page: classifyPath(req.path),
-    // 生の User-Agent は保存しない。bot/browser/unknown の別だけ
-    clientKind: classifyClient(headers.userAgent),
+    clientKind,
+    // 名乗ったクローラー名。有限の集合に潰す（未知は 'other'、人間は 'none'）
+    bot: classifyBot(headers.userAgent, clientKind === 'bot'),
     source: classifySource(headers.referer, selfHost),
     synthetic: headers.synthetic ? 1 : 0,
   };
 }
 
 const UPSERT =
-  'INSERT INTO page_views (day, page, client_kind, source, synthetic, hits) VALUES (?, ?, ?, ?, ?, 1) ' +
-  'ON CONFLICT (day, page, client_kind, source, synthetic) DO UPDATE SET hits = hits + 1';
+  'INSERT INTO page_views (day, page, client_kind, bot, source, synthetic, hits) VALUES (?, ?, ?, ?, ?, ?, 1) ' +
+  'ON CONFLICT (day, page, client_kind, bot, source, synthetic) DO UPDATE SET hits = hits + 1';
 
 export async function recordPageView(db: D1Database, row: PageViewRow): Promise<void> {
   await db
     .prepare(UPSERT)
-    .bind(row.day, row.page, row.clientKind, row.source, row.synthetic)
+    .bind(row.day, row.page, row.clientKind, row.bot, row.source, row.synthetic)
     .run();
 }

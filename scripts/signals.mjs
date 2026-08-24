@@ -178,10 +178,10 @@ h('ページ到達（サーバ側計測）');
 let views = [];
 try {
   views = q(
-    'SELECT page, client_kind kind, source, SUM(hits) hits FROM page_views WHERE synthetic = 0 GROUP BY page, client_kind, source',
+    'SELECT page, client_kind kind, bot, source, SUM(hits) hits FROM page_views WHERE synthetic = 0 GROUP BY page, client_kind, bot, source',
   );
 } catch {
-  console.log('page_views テーブルがまだありません（migration 0006 未適用）。');
+  console.log('page_views テーブルがまだありません（migration 0006/0007 未適用）。');
 }
 
 if (views.length === 0) {
@@ -192,8 +192,32 @@ if (views.length === 0) {
 
   console.log(`到達（のべ）           ${sum(() => true)}`);
   console.log(`  ブラウザ             ${humanHits}`);
-  console.log(`  ボット               ${sum((r) => r.kind === 'bot')}   ← 索引されている証拠`);
+  console.log(`  ボット               ${sum((r) => r.kind === 'bot')}`);
   console.log(`  判別できず           ${sum((r) => r.kind === 'unknown')}`);
+
+  // AI 検索に載っているかは、ここでしか分からない。
+  // **3 段を混ぜない。** 学習収集が来ても引用は増えず、索引クローラーが来ても
+  // まだ引用ではない。利用者の質問に応じた実時間フェッチだけが引用の証拠になる。
+  const bots = (names) => sum((r) => names.includes(r.bot));
+  const LIVE = ['chatgpt-user', 'claude-user', 'perplexity-user'];
+  const INDEX = ['oai-searchbot', 'perplexitybot', 'bingbot', 'duckduckbot'];
+  const TRAIN = ['gptbot', 'claudebot', 'ccbot', 'google-extended', 'bytespider',
+    'meta-externalagent', 'amazonbot', 'applebot-extended'];
+
+  console.log('\nAI クローラー:');
+  console.log(`  実時間フェッチ       ${bots(LIVE)}   ← 誰かが AI に聞いて開かれた（引用の証拠）`);
+  console.log(`  AI 検索の索引        ${bots(INDEX)}   ← 引用されうる状態か`);
+  console.log(`  学習コーパス収集     ${bots(TRAIN)}   ← 来ても短期の引用は増えない`);
+
+  const byBot = [...new Set(views.filter((r) => r.bot !== 'none' && r.bot !== 'other').map((r) => r.bot))]
+    .map((b) => ({ bot: b, hits: sum((r) => r.bot === b) }))
+    .sort((a, b) => b.hits - a.hits);
+  if (byBot.length > 0) {
+    console.log('  内訳: ' + byBot.map((b) => `${b.bot} ${b.hits}`).join(' / '));
+  }
+  if (bots([...LIVE, ...INDEX]) === 0) {
+    console.log('  ※ AI 検索側のクローラーはまだ 1 件も来ていません。');
+  }
 
   // 検索から人が来ているかどうかが、874 枚を作った投資の答え合わせになる
   console.log('\n人間の参照元:');

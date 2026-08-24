@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildPageView, utcDay } from '../src/page-views';
+import { BOT_NAMES } from '../src/bot-name';
 
 const SELF = 'license-guard.rcc-aoki.workers.dev';
 const AT = Date.UTC(2026, 7, 24, 15, 30);
@@ -45,6 +46,22 @@ describe('記録する到達', () => {
     // ビーコン方式では原理的に取れない。索引されているかはここでしか分からない
     const row = buildPageView(req(), hdr({ userAgent: 'Mozilla/5.0 (compatible; Googlebot/2.1)' }), SELF, AT);
     expect(row?.clientKind).toBe('bot');
+  });
+
+  it('どのクローラーかを残す', () => {
+    // 「ボットが 16 回来た」では AI 検索に載っているかを判定できない
+    const row = buildPageView(
+      req(),
+      hdr({ userAgent: 'Mozilla/5.0 (compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot)' }),
+      SELF,
+      AT,
+    );
+    expect(row?.bot).toBe('oai-searchbot');
+  });
+
+  it('人間の行は bot を none にする', () => {
+    // 'other' にすると、あとから人間とボットを足し合わせてしまう
+    expect(buildPageView(req(), hdr(), SELF, AT)!.bot).toBe('none');
   });
 
   it('日付は UTC で切る', () => {
@@ -94,6 +111,14 @@ describe('保存する値の制約', () => {
     const row = buildPageView(req(), hdr({ userAgent: ua }), SELF, AT);
     expect(JSON.stringify(row)).not.toContain('Mozilla');
     expect(['bot', 'browser', 'unknown']).toContain(row!.clientKind);
+  });
+
+  it('クローラー名も有限の集合に潰す。原文を通さない', () => {
+    const ua = 'Mozilla/5.0 (compatible; SomeInternalCrawler/1.0; +https://corp.example/secret-project)';
+    const row = buildPageView(req(), hdr({ userAgent: ua }), SELF, AT);
+    expect(JSON.stringify(row)).not.toContain('secret-project');
+    expect(JSON.stringify(row)).not.toContain('SomeInternalCrawler');
+    expect(BOT_NAMES).toContain(row!.bot);
   });
 
   it('検索語を行に残さない', () => {
