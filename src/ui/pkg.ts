@@ -12,7 +12,7 @@ import {
 } from './layout';
 import type { Ecosystem, Linkage } from '../types';
 
-const ECOSYSTEM_LABEL: Record<Ecosystem, string> = {
+export const ECOSYSTEM_LABEL: Record<Ecosystem, string> = {
   npm: 'npm',
   pypi: 'PyPI',
   go: 'Go module',
@@ -80,7 +80,7 @@ export function renderPackagePage(input: PackagePageInput): string {
 
   const body = `
 <h1>Is <code>${esc(name)}</code> safe for commercial use?</h1>
-<p class="sub">${esc(eco)} package &middot; License: <a href="${known ? `/license/${encodeURIComponent(known.id)}` : '/licenses'}">${esc(spdx)}</a></p>
+<p class="sub"><a href="/packages">${esc(eco)} package</a> &middot; License: <a href="${known ? `/license/${encodeURIComponent(known.id)}` : '/licenses'}">${esc(spdx)}</a></p>
 
 <p>${esc(headline)}</p>
 

@@ -41,6 +41,8 @@ describe('経路の分類', () => {
     expect(classifyPath('/')).toBe('home');
     expect(classifyPath('/licenses')).toBe('licenses');
     expect(classifyPath('/compare')).toBe('compare-index');
+    // other に潰すと、/pkg/* の親として作った意味があったのか判定できない
+    expect(classifyPath('/packages')).toBe('packages');
   });
 
   it('ライセンスページは ID を残す（どれに人が来るか知りたい）', () => {
@@ -73,8 +75,9 @@ describe('経路の分類', () => {
   });
 
   it('戻り値は必ず有限の集合に収まる', () => {
-    const allowed = /^(home|licenses|compare-index|pkg|other|license:[^\s]+|compare:[^\s]+)$/;
-    for (const p of ['/', '/x', '/pkg/npm/a', '/license/MIT', '/compare/a-vs-b', '//', '/../..']) {
+    const allowed =
+      /^(home|licenses|compare-index|packages|pkg|other|license:[^\s]+|compare:[^\s]+)$/;
+    for (const p of ['/', '/x', '/packages', '/pkg/npm/a', '/license/MIT', '/compare/a-vs-b', '//', '/../..']) {
       expect(classifyPath(p), p).toMatch(allowed);
     }
   });
@@ -140,6 +143,13 @@ describe('参照元の分類', () => {
     for (const r of ['https://news.ycombinator.com/', 'https://www.reddit.com/r/x', 'https://zenn.dev/a']) {
       expect(classifySource(r, SELF), r).toBe('social');
     }
+  });
+
+  // 2026-08-24 に dev.to へ記事を出した。ここに無いと、その到達が other に
+  // 混ざって「被リンクを増やす」という仮説そのものを検証できない
+  it('記事を出した先を other に落とさない', () => {
+    expect(classifySource('https://dev.to/ryosuke_aoki_2266a6aa25dc/x', SELF)).toBe('social');
+    expect(classifySource('https://medium.com/@x/y', SELF)).toBe('social');
   });
 
   it('戻り値は 6 値のみ', () => {

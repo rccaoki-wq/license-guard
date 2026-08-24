@@ -3,6 +3,7 @@ import { renderPage } from './ui/page';
 import { renderLicenseIndex, renderLicensePage } from './ui/license';
 import { findPair, renderCompareIndex, renderComparePage } from './ui/compare';
 import { renderPackageNotFound, renderPackagePage } from './ui/pkg';
+import { renderPackageIndex } from './ui/packages';
 import { scan, withProvenanceNote } from './scan';
 import { LicenseCache } from './resolver/cache';
 import { LicenseResolver } from './resolver';
@@ -353,24 +354,43 @@ app.get('/license/:id', (c) => {
   return c.html(renderLicensePage(entry), 200, { 'cache-control': SEO_CACHE });
 });
 
-app.get('/sitemap.xml', async (c) => {
-  let packages: SitemapPackage[] = [];
+/**
+ * 解決実績のあるパッケージ。sitemap と `/packages` の**両方がこれを使う**。
+ *
+ * 別々に問い合わせると、提出しているのに一覧から辿れないページや、
+ * 一覧にあるのに提出していないページが静かにできる。取得元を 1 本にする。
+ * 絞り込み（結論が配布モデルで変わるか）は表示側の述語に任せる。
+ */
+async function listResolvedPackages(db: D1Database): Promise<SitemapPackage[]> {
   try {
-    // 解決実績のあるパッケージのみ載せる。ページに中身があることが保証されるため。
-    // spdx も引くのは、結論が配布モデルで変わるものだけに絞るため（buildSitemap 側で判定）。
-    const rows = await c.env.DB.prepare(
-      `SELECT DISTINCT ecosystem, package, spdx FROM license_cache
-       WHERE spdx IS NOT NULL ORDER BY package LIMIT 45000`,
-    ).all<{ ecosystem: string; package: string; spdx: string }>();
+    const rows = await db
+      .prepare(
+        `SELECT DISTINCT ecosystem, package, spdx FROM license_cache
+         WHERE spdx IS NOT NULL ORDER BY package LIMIT 45000`,
+      )
+      .all<{ ecosystem: string; package: string; spdx: string }>();
 
-    packages = (rows.results ?? [])
+    return (rows.results ?? [])
       .filter((r): r is { ecosystem: Ecosystem; package: string; spdx: string } =>
         ECOSYSTEMS.includes(r.ecosystem as Ecosystem),
       )
       .map((r) => ({ ecosystem: r.ecosystem, name: r.package, spdx: r.spdx }));
   } catch {
-    // DB 障害時もシードのみで sitemap を返す
+    // DB 障害時も静的ページだけで応答を返す
+    return [];
   }
+}
+
+// `/pkg/*` の親。sitemap に載せるだけでは巡回されなかったので、
+// 辿れる場所を作る（詳細は ui/packages.ts）。
+app.get('/packages', async (c) =>
+  c.html(renderPackageIndex(await listResolvedPackages(c.env.DB)), 200, {
+    'cache-control': SEO_CACHE,
+  }),
+);
+
+app.get('/sitemap.xml', async (c) => {
+  const packages = await listResolvedPackages(c.env.DB);
 
   return c.text(buildSitemap(packages), 200, {
     'content-type': 'application/xml; charset=utf-8',

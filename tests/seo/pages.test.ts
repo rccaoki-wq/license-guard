@@ -34,6 +34,16 @@ describe('renderLicensePage', () => {
     expect(html).toContain('<meta name="description"');
   });
 
+  // Search Console の所有権トークン。Google は一度確認して終わりではなく
+  // 定期的に取りに来るので、消えるとプロパティが確認解除され、
+  // インデックス状況もサイトマップの結果も見えなくなる。静かに壊れる類なので固定する。
+  it('Search Console の所有権トークンを出す', () => {
+    const html = renderLicensePage(agpl);
+    expect(html).toContain(
+      '<meta name="google-site-verification" content="ZNgNlJSyDWMr0feWYipRDqgs_HhYsrITbT0YVUv1A4M">',
+    );
+  });
+
   it('5つの配布モデルすべてを表に含む', () => {
     const html = renderLicensePage(agpl);
     for (const label of [

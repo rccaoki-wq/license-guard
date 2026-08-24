@@ -49,6 +49,7 @@ export function buildSitemap(packages: SitemapPackage[]): string {
     '/',
     '/licenses',
     '/compare',
+    '/packages',
     ...LICENSE_CATALOG.map((l) => `/license/${encodeURIComponent(l.id)}`),
     ...COMPARE_PAIRS.map(comparePath),
   ];

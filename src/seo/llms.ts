@@ -67,6 +67,7 @@ ${COMPARE_PAIRS.map((c) => `- [${c.a} vs ${c.b}](${SITE_ORIGIN}${comparePath(c)}
 
 - [License index](${SITE_ORIGIN}/licenses)
 - [Comparison index](${SITE_ORIGIN}/compare)
+- [Packages with obligations](${SITE_ORIGIN}/packages)
 - [Interactive scanner](${SITE_ORIGIN}/)
 `;
 }

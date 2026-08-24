@@ -266,6 +266,21 @@ export interface LayoutOptions {
   jsonLd?: string;
 }
 
+/**
+ * Google Search Console の所有権トークン。
+ *
+ * **消してはいけない。** これは一度きりの確認ではなく、所有権の継続的な証明で、
+ * Google は定期的に再取得する。消えていればプロパティは確認解除され、
+ * インデックス状況もサイトマップの送信結果も見えなくなる。
+ *
+ * tenchorooms.com は URL プレフィックスのプロパティしか無く、
+ * licenseguard. サブドメインは含まれない。DNS TXT を書ければドメイン
+ * プロパティで全サブドメインを一度に賄えるが、この Worker は Cloudflare の
+ * ゾーンに DNS を書けないため、自分で出せる HTML タグ方式を採っている。
+ */
+const GOOGLE_SITE_VERIFICATION =
+  '<meta name="google-site-verification" content="ZNgNlJSyDWMr0feWYipRDqgs_HhYsrITbT0YVUv1A4M">';
+
 export function renderLayout(o: LayoutOptions): string {
   const canonical = SITE_ORIGIN + o.path;
   return `<!doctype html>
@@ -276,6 +291,7 @@ export function renderLayout(o: LayoutOptions): string {
 <title>${esc(o.title)}</title>
 <meta name="description" content="${esc(o.description)}">
 <link rel="canonical" href="${esc(canonical)}">
+${GOOGLE_SITE_VERIFICATION}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta property="og:title" content="${esc(o.title)}">
 <meta property="og:description" content="${esc(o.description)}">
@@ -292,6 +308,7 @@ ${o.jsonLd ?? ''}
     <a href="/">Scan</a>
     <a href="/licenses">Licenses</a>
     <a href="/compare">Compare</a>
+    <a href="/packages">Packages</a>
   </nav>
 </div>
 ${o.body}

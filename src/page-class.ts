@@ -33,6 +33,7 @@ export function classifyPath(pathname: string): string {
   if (p === '/') return 'home';
   if (p === '/licenses') return 'licenses';
   if (p === '/compare') return 'compare-index';
+  if (p === '/packages') return 'packages';
 
   // 比較ページのスラッグは自前で作った有限集合なのでそのまま残す
   const cmp = /^\/compare\/([a-z0-9.+-]+-vs-[a-z0-9.+-]+)$/.exec(p);
@@ -89,6 +90,8 @@ const SOCIAL_HOSTS = [
   'reddit.com', 'news.ycombinator.com', 'x.com', 'twitter.com', 't.co',
   'linkedin.com', 'lnkd.in', 'mastodon.', 'bsky.app', 'facebook.com',
   'qiita.com', 'zenn.dev', 'note.com', 'hatena.ne.jp',
+  // 記事を出した先。ここに無いと other に混ざり、被リンクが効いたか分からない
+  'dev.to', 'medium.com', 'lobste.rs', 'hackernoon.com',
 ];
 
 export function classifySource(referer: string | null | undefined, selfHost: string): Source {
