@@ -180,7 +180,7 @@ export const TOOL_DEFINITIONS = [
               resolvedFrom: {
                 type: 'string',
                 description:
-                  'Where the license came from. "lockfile" is exact; "registry-latest" means the pinned version could not be read and the latest release was used instead; "not-checked" means the lookup budget ran out and this dependency was never resolved.',
+                  'Where the license came from. "lockfile" is exact; "registry" and "deps-dev" are the pinned version as published; "registry-latest" means the pinned version could not be read and the latest release was used instead; "not-checked" means the lookup budget ran out and this dependency was never resolved.',
               },
               verdict: { type: 'string', enum: VERDICTS },
               obligations: { type: 'array', items: { type: 'string' } },

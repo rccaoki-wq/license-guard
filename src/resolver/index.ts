@@ -1,6 +1,6 @@
 import { fetchNpmLicense } from './npm';
 import { fetchPypiLicense } from './pypi';
-import { fetchGoLicense } from './clearlydefined';
+import { fetchGoLicenseWithFallback } from './go';
 import { fetchCratesLicense } from './crates';
 import type { Dependency, Ecosystem, ResolvedFrom } from '../types';
 
@@ -17,6 +17,12 @@ export interface Resolution {
 export interface LicenseLookup {
   spdx: string | null;
   fromLatest?: boolean;
+  /**
+   * 既定の出典（SOURCE）と違う相手が答えた場合に、その相手を伝える。
+   * 「どこから読んだか」は「何が言えるか」とは別の事実で、
+   * 経路を統合した都合で表示だけ既定値のまま残すと、静かに嘘になる。
+   */
+  source?: ResolvedFrom;
 }
 
 export interface CacheLike {
@@ -38,7 +44,7 @@ export interface Fetchers {
 export const defaultFetchers: Fetchers = {
   npm: (n, v) => fetchNpmLicense(n, v),
   pypi: (n, v) => fetchPypiLicense(n, v),
-  go: (n, v) => fetchGoLicense(n, v),
+  go: (n, v) => fetchGoLicenseWithFallback(n, v),
   cargo: (n, v) => fetchCratesLicense(n, v),
 };
 
@@ -74,6 +80,7 @@ const RESOLVED_FROM_VALUES: readonly ResolvedFrom[] = [
   'lockfile',
   'registry',
   'registry-latest',
+  'deps-dev',
   'clearlydefined',
   'unresolved',
 ];
@@ -131,7 +138,11 @@ export class LicenseResolver {
       return { spdx: null, resolvedFrom: 'unresolved' };
     }
 
-    const source: ResolvedFrom = lookup.fromLatest ? 'registry-latest' : SOURCE[dep.ecosystem];
+    // fromLatest が最優先。「要求した版そのものではない」は、どの API が
+    // 答えたかより利用者の判断を変えるため、こちらを潰してはならない。
+    const source: ResolvedFrom = lookup.fromLatest
+      ? 'registry-latest'
+      : (lookup.source ?? SOURCE[dep.ecosystem]);
     await this.cache.put(dep, lookup.spdx, source).catch(() => undefined);
     return { spdx: lookup.spdx, resolvedFrom: source };
   }

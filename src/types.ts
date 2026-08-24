@@ -68,6 +68,8 @@ export type ResolvedFrom =
   | 'lockfile'
   | 'registry'
   | 'registry-latest'
+  /** deps.dev (Google Open Source Insights)。Go の主たる出典 */
+  | 'deps-dev'
   | 'clearlydefined'
   /** 照会の上限に達したため確認していない。allowed と混同してはならない */
   | 'not-checked'
