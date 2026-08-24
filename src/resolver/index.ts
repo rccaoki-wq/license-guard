@@ -78,8 +78,20 @@ const RESOLVED_FROM_VALUES: readonly ResolvedFrom[] = [
   'unresolved',
 ];
 
-/** 外部 API への同時接続数の上限 */
-const CONCURRENCY = 8;
+/**
+ * 外部 API への同時接続数の上限。
+ *
+ * 律速は帯域ではなく**上流の応答時間**。実測で ClearlyDefined が 1〜2 秒、
+ * proxy.golang.org が 0.6〜1.7 秒あり、Go は両方を順に踏むので 1 件 ≈ 3 秒。
+ * 8 並列だと 20 秒の予算で 50 件ほどしか終わらず、実物の go.sum（299 件）は
+ * 大半が未確認のまま返っていた。待ち時間が支配的なので、並列数を上げた分
+ * ほぼそのまま件数が伸びる。
+ *
+ * 上げすぎない理由は 2 つ。ClearlyDefined は公共の無償 API であること、
+ * Worker には 1 リクエストあたりのサブリクエスト上限があり、
+ * MAX_LOOKUPS(200) × 1 件あたり 2〜3 回で既に余裕が大きくないこと。
+ */
+const CONCURRENCY = 16;
 
 export class LicenseResolver {
   constructor(
