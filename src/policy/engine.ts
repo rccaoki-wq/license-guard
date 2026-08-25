@@ -101,6 +101,21 @@ type Node =
   | { license: string; plus?: boolean; exception?: string }
   | { left: Node; conjunction: 'and' | 'or'; right: Node };
 
+/**
+ * 読めなかった要素を式の中に残しておくための印。
+ *
+ * 落とさずに置き換えるのが要点。**取り除いてしまうと、読めた部分だけで
+ * 出した答えが「式全体の答え」として返る。** `LicenseRef-` はパーサが
+ * 識別子として受け取るので、この印のまま通常の評価に載せられる。
+ * 分類は unknown → review になり、AND では義務が合算され、
+ * OR では（下の分岐で）選ばれない。
+ */
+const UNREADABLE = 'LicenseRef-lg-unreadable';
+
+function isUnreadableMarker(licenseId: string): boolean {
+  return licenseId.toLowerCase() === UNREADABLE.toLowerCase();
+}
+
 function mergeObligations(a: Obligation[], b: Obligation[]): Obligation[] {
   return [...new Set([...a, ...b])];
 }
@@ -110,16 +125,23 @@ interface Ranked {
   result: PolicyResult;
   /** 文脈に依らない強さ。AND は強い方、OR は選んだ方を引き継ぐ */
   rank: number;
+  /** 読めなかった要素を含むか。OR で「選べない選択肢」を選ばないために使う */
+  unreadable: boolean;
 }
 
 function evalNode(node: Node, ctx: PolicyContext): Ranked {
   if ('license' in node) {
+    const unreadable = isUnreadableMarker(node.license);
     const base = evaluateLicense(node.license, ctx);
     const rank = CATEGORY_RANK[categorize(node.license)];
     if (node.exception && LINKING_EXCEPTIONS.has(node.exception.toLowerCase())) {
-      return { result: applyLinkingException(node.license, node.exception, base), rank };
+      return {
+        result: applyLinkingException(node.license, node.exception, base),
+        rank,
+        unreadable,
+      };
     }
-    return { result: base, rank };
+    return { result: base, rank, unreadable };
   }
 
   const left = evalNode(node.left, ctx);
@@ -140,10 +162,18 @@ function evalNode(node: Node, ctx: PolicyContext): Ranked {
      * ライセンス自体の強さ → 手間の順で比べる。どちらも文脈に依らないので、
      * 配布形態が変わっても**同じライセンスが選ばれる**。
      */
+    /**
+     * **読めなかった選択肢は選ばない。** 読めないものは review・義務ゼロ
+     * として評価されるため、判定の軽さだけで比べると
+     * `AGPL-3.0 OR NOASSERTION` で「読めない方」が最も緩い選択肢に
+     * なってしまう。選べない選択肢を選んだことにするのは過小警告。
+     */
     const chosen =
-      compareForChoice(left, right) <= 0
-        ? left
-        : right;
+      left.unreadable !== right.unreadable
+        ? (left.unreadable ? right : left)
+        : compareForChoice(left, right) <= 0
+          ? left
+          : right;
     return {
       result: {
         verdict: chosen.result.verdict,
@@ -151,6 +181,7 @@ function evalNode(node: Node, ctx: PolicyContext): Ranked {
         rationale: `This package offers a choice of licenses. The least restrictive option is shown. ${chosen.result.rationale}`,
       },
       rank: chosen.rank,
+      unreadable: chosen.unreadable,
     };
   }
 
@@ -164,7 +195,65 @@ function evalNode(node: Node, ctx: PolicyContext): Ranked {
       rationale: `Multiple licenses apply at once. ${left.result.rationale} / ${right.result.rationale}`,
     },
     rank: Math.max(left.rank, right.rank),
+    unreadable: left.unreadable || right.unreadable,
   };
+}
+
+/**
+ * 式として読めなかったものを、読めた要素と読めなかった要素に分ける。
+ *
+ * 演算子を含む式が `parse()` に落ちたとき、以前は**式ごと捨てて
+ * review・義務ゼロ**を返していた。読める側が緩ければ過剰警告になり、
+ * 読める側が厳しければ過小警告になる。mattermost-server の
+ * `AGPL-3.0 AND ... AND NOASSERTION` は、NOASSERTION が読めないという
+ * 理由だけで **AGPL に一言も触れない答え**を返していた。
+ *
+ * 救済できないときは null を返す（呼び出し側で従来どおり review）。
+ */
+function salvageUnreadableOperands(
+  normalized: string,
+): { expression: string; unreadable: string[] } | null {
+  /**
+   * **`WITH` を含む式は救済しない。**
+   *
+   * WITH の右側は例外 ID であってライセンスではない。ここを「読めない要素」
+   * として印に置き換えると、知らない例外が付いた GPL を、例外の効果を
+   * 判断したかのような形で返しかねない。式ごと review に落とす。
+   */
+  if (/\sWITH\s/i.test(normalized)) return null;
+
+  const parts = normalized.split(/(\s+(?:AND|OR)\s+|[()])/i);
+  const unreadable: string[] = [];
+  let readable = 0;
+
+  const rebuilt = parts
+    .map((part) => {
+      const operand = part.trim();
+      if (operand === '' || operand === '(' || operand === ')') return part;
+      if (/^(AND|OR)$/i.test(operand)) return part;
+
+      if (canParse(operand)) {
+        readable += 1;
+        return part;
+      }
+      unreadable.push(operand);
+      return part.replace(operand, UNREADABLE);
+    })
+    .join('');
+
+  // 読めた要素が無いなら救済する材料が無い。読めない要素が無いのに
+  // 全体が落ちたのは構造の問題なので、こちらも触らない
+  if (readable === 0 || unreadable.length === 0) return null;
+  return { expression: rebuilt, unreadable };
+}
+
+function canParse(expression: string): boolean {
+  try {
+    parse(expression);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** 負なら左、正なら右。0 なら宣言順（左）のまま */
@@ -231,6 +320,27 @@ export function evaluateExpression(
     if (!/[\s()]/.test(normalized) && categorize(normalized) !== 'unknown') {
       return withNote(evaluateLicense(normalized, ctx));
     }
+
+    /**
+     * 演算子を含む式でも、読めた要素の答えは残す。
+     * 読めなかった要素は取り除かず印に置き換えたまま評価するので、
+     * AND では義務が合算され、OR では選ばれない。
+     * **落とした事実は必ず文章で述べる。**
+     */
+    const salvaged = salvageUnreadableOperands(normalized);
+    if (salvaged !== null) {
+      try {
+        const result = evalNode(parse(salvaged.expression) as Node, ctx).result;
+        const names = salvaged.unreadable.map((u) => `"${u}"`).join(', ');
+        return withNote({
+          ...result,
+          rationale: `${result.rationale} Part of the declared expression could not be read as SPDX (${names}), so it is not reflected above; that part still needs individual review.`,
+        });
+      } catch {
+        // 印を入れてもなお読めないなら、従来どおり式全体を review に落とす
+      }
+    }
+
     return {
       verdict: 'review',
       obligations: [],

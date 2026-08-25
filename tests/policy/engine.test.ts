@@ -161,3 +161,74 @@ describe('OR の選択は宣言順に左右されない', () => {
     expect(r.obligations).toEqual(['attribution']);
   });
 });
+
+describe('式の一部が読めなくても、読めた側は捨てない', () => {
+  /**
+   * 以前は `parse()` が失敗した時点で式全体を捨て、
+   * verdict=review / obligations=[] を返していた。**単一の識別子に
+   * 見えるものだけを救済していたので、演算子を含む式は丸ごと失われた。**
+   *
+   * これは両方向に壊れる。読める側が緩ければ過剰警告になり、
+   * 読める側が厳しければ**過小警告になる** —— 後者が危ない。
+   */
+
+  it('AND の読めた側の義務を消さない（AGPL を review で素通ししない）', () => {
+    // 実 D1 トラフィック: mattermost-server は
+    // "AGPL-3.0 AND ... AND NOASSERTION" を宣言している。
+    // NOASSERTION が読めないだけで、**AGPL には一言も触れずに
+    // review / 義務ゼロ**を返していた
+    const r = evaluateExpression('AGPL-3.0 AND NOASSERTION', ctx());
+    expect(r.verdict).toBe('blocked');
+    expect(r.obligations).toContain('source-disclosure');
+    expect(r.rationale).toContain('AGPL-3.0');
+  });
+
+  it('OR の読める選択肢を採る（docutils を review に積まない）', () => {
+    // 実測: 上位 300 PyPI の docutils は "BSD-3-Clause OR GPL"。
+    // BSD がそこに書いてあるのに、GPL の版が読めないという理由で
+    // 式全体を捨てていた
+    const r = evaluateExpression('BSD-3-Clause OR GPL', ctx());
+    expect(r.verdict).toBe('allowed');
+    expect(r.obligations).toContain('attribution');
+  });
+
+  it('読めなかった部分を黙って落とさない', () => {
+    for (const expression of ['AGPL-3.0 AND NOASSERTION', 'BSD-3-Clause OR GPL']) {
+      const r = evaluateExpression(expression, ctx());
+      expect(r.rationale, expression).toMatch(/could not be read/i);
+    }
+  });
+
+  it('OR で「読めない方」を緩い選択肢として選ばない', () => {
+    // 読めないものは review（義務ゼロ）として評価されるので、
+    // 判定の軽さだけで選ぶと **blocked な AGPL より「緩い」ことになる。**
+    // 選べない選択肢を選んだことにするのは、過小警告そのもの
+    const r = evaluateExpression('AGPL-3.0 OR NOASSERTION', ctx());
+    expect(r.verdict).toBe('blocked');
+    expect(r.obligations).toContain('source-disclosure');
+  });
+
+  it('救済しても、読めた側だけで出る答えより緩くならない', () => {
+    for (const model of ALL_DISTRIBUTION_MODELS) {
+      const severity = { allowed: 0, review: 1, blocked: 2 } as const;
+      const partial = evaluateExpression('GPL-3.0-only AND NOASSERTION', ctx({ distributionModel: model }));
+      const readable = evaluateExpression('GPL-3.0-only', ctx({ distributionModel: model }));
+      expect(severity[partial.verdict], model).toBeGreaterThanOrEqual(severity[readable.verdict]);
+      for (const o of readable.obligations) expect(partial.obligations, model).toContain(o);
+    }
+  });
+
+  it('知らない例外が付いた式は救済しない（例外を無かったことにしない）', () => {
+    // WITH の右側は例外 ID であってライセンスではない。ここを
+    // 「読めない部分」として外すと、**例外で緩和されたかのように
+    // 見える答え**を返しかねない。式ごと review に落とす
+    const r = evaluateExpression('GPL-3.0-only WITH Nonexistent-Exception-9.9', ctx());
+    expect(r.verdict).toBe('review');
+  });
+
+  it('読める要素が一つも無ければ従来どおり review', () => {
+    const r = evaluateExpression('Frobnicate-1.0 AND Whatsit-2.0', ctx());
+    expect(r.verdict).toBe('review');
+    expect(r.obligations).toEqual([]);
+  });
+});
