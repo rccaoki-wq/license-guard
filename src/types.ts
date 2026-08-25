@@ -92,6 +92,12 @@ export type ResolvedFrom =
   /** deps.dev (Google Open Source Insights)。Go の主たる出典 */
   | 'deps-dev'
   | 'clearlydefined'
+  /**
+   * リポジトリ直下の LICENSE ファイルそのもの。版を指定しない問いにだけ使う。
+   * 上流のスキャン結果と違って一次資料だが、既定ブランチの現在の内容なので
+   * 特定の版の答えではない。
+   */
+  | 'repo-license'
   /** 照会の上限に達したため確認していない。allowed と混同してはならない */
   | 'not-checked'
   /**

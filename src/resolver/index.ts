@@ -82,6 +82,7 @@ const RESOLVED_FROM_VALUES: readonly ResolvedFrom[] = [
   'registry-latest',
   'deps-dev',
   'clearlydefined',
+  'repo-license',
   'unresolved',
 ];
 

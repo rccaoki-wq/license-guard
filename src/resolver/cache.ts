@@ -40,9 +40,17 @@ export function cacheKey(ecosystem: string, name: string, version: string): stri
  */
 const BATCH_SIZE = 90;
 
-/** 情報源が不変か（そのバージョン自身の宣言に基づくか） */
+/**
+ * 情報源が不変か（そのバージョン自身の宣言に基づくか）。
+ *
+ * `repo-license` は既定ブランチの現在の LICENSE を読んだもので、
+ * 再ライセンスされればその日から答えが変わる。今は版が null の問いにしか
+ * 使われず put も走らないが、**「版に紐づく事実」ではない点は同じ**なので
+ * ここで先に不変から外しておく。後で経路が増えたときに、
+ * 古い答えを恒久に返す形にはならない。
+ */
 function isImmutableSource(source: string): boolean {
-  return source !== 'registry-latest';
+  return source !== 'registry-latest' && source !== 'repo-license';
 }
 
 /**

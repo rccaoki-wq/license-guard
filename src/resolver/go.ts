@@ -1,5 +1,6 @@
 import { fetchDepsDevGoLicense } from './depsdev';
 import { fetchGoLicense } from './clearlydefined';
+import { fetchRepoLicense } from './repo-license';
 import type { LicenseLookup } from './index';
 
 /**
@@ -17,12 +18,29 @@ import type { LicenseLookup } from './index';
  * 出所は混ぜない。どちらが答えたかを `source` で持ち上げ、
  * 利用者には「どこから読んだか」をそのまま出す。速い方に統一した都合で
  * 全部 clearlydefined と表示するのは、単に嘘になる。
+ *
+ * **版を指定しない問いだけは、先にリポジトリの LICENSE を読む。**
+ * 版が無いとき deps.dev は何も答えず（`version === null` で即 null）、
+ * ClearlyDefined の「最新」推測だけが残る。それが古びていて、
+ * Vault / Consul / Terraform / Nomad を MPL-2.0 と表示していた——実際は
+ * 2023 年に BUSL-1.1 へ移行済みで、**許容側に外していた**。
+ * 版を指定しない問いは「今このプロジェクトは何か」なので、
+ * 収録済みスキャン結果より既定ブランチの LICENSE のほうが直接答えている。
+ *
+ * 版が指定されている場合はここを通さない。その版の答えは deps.dev が正しく、
+ * Vault v1.9 は本当に MPL-2.0 だった。**過去の版に今の LICENSE を
+ * かぶせてはならない。**
  */
 export async function fetchGoLicenseWithFallback(
   modulePath: string,
   version: string | null,
   fetchImpl: typeof fetch = fetch,
 ): Promise<LicenseLookup> {
+  if (version === null) {
+    const repo = await fetchRepoLicense(modulePath, fetchImpl);
+    if (repo.spdx !== null) return repo;
+  }
+
   const primary = await fetchDepsDevGoLicense(modulePath, version, fetchImpl);
   if (primary.spdx !== null) return { ...primary, source: 'deps-dev' };
 
