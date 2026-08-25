@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { categorize } from '../../src/policy/categories';
-import { normalizeLicenseString } from '../../src/policy/normalize';
+import { normalizeExpressionOperands, normalizeLicenseString } from '../../src/policy/normalize';
 import { evaluateExpression } from '../../src/policy/engine';
 import type { PolicyContext } from '../../src/types';
 
@@ -219,5 +219,39 @@ describe('似た名前・似た並びに引きずられない', () => {
     expect(categorize('CECILL-B')).toBe('permissive');
     expect(categorize('CECILL-C')).toBe('library-copyleft');
     expect(categorize('CECILL-2.1')).toBe('strong-copyleft');
+  });
+});
+
+describe('式の中の要素の綴り', () => {
+  it('要素の綴りだけを SPDX に寄せる', () => {
+    expect(normalizeExpressionOperands('BSD 3-Clause OR Apache-2.0')).toBe(
+      'BSD-3-Clause OR Apache-2.0',
+    );
+    expect(normalizeExpressionOperands('(Apache 2.0 AND MIT)')).toBe('(Apache-2.0 AND MIT)');
+  });
+
+  it('版を欠く総称には触れない（宣言に無い版を名乗らない）', () => {
+    // 単体の "GPL" は GPL-3.0-only に倒したうえで「補った」と開示するが、
+    // 式の中では開示する場所が無い。綴りの修正と、版の補完は別のこと
+    expect(normalizeExpressionOperands('BSD-3-Clause OR GPL')).toBe('BSD-3-Clause OR GPL');
+    expect(normalizeExpressionOperands('MIT AND Apache')).toBe('MIT AND Apache');
+  });
+
+  it('WITH の右側（例外 ID）には触れない', () => {
+    expect(normalizeExpressionOperands('GPL-2.0-only WITH Classpath-exception-2.0')).toBe(
+      'GPL-2.0-only WITH Classpath-exception-2.0',
+    );
+  });
+
+  it('綴りが違うだけの式が review でなく allowed になる', () => {
+    expect(evaluateExpression('BSD 3-Clause OR Apache-2.0', ctx).verdict).toBe('allowed');
+  });
+
+  it('綴りを寄せたうえで、読めない要素の救済も効く', () => {
+    // 綴り直しと救済は順に効くこと。先に綴りを寄せないと、
+    // 読める側まで「読めなかった」側に落ちる
+    const r = evaluateExpression('Apache 2.0 AND NOASSERTION', ctx);
+    expect(r.obligations).toContain('patent-grant');
+    expect(r.rationale).toContain('could not be read');
   });
 });

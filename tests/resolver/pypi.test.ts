@@ -161,6 +161,34 @@ describe('自由記述の欄に、正しい SPDX 式が書かれていること�
   });
 
   /**
+   * 式の形は正しいのに、**要素の綴りだけが SPDX と違う**もの。
+   * uritemplate は "BSD 3-Clause OR Apache-2.0"（ハイフンが空白）。
+   * 単体の "BSD 3-Clause" は既に正規化できていたが、式の中に入ると
+   * 丸ごと素通しされるため、直る機会が無いまま捨てられていた。
+   *
+   * **版を補う正規化はここでは採らない。** "GPL" を "GPL-3.0-only" に
+   * するのは綴りの修正ではなく、宣言に無い版を名乗る主張になる。
+   */
+  it('要素の綴りだけが違う式を受け取る（uritemplate の実データ）', async () => {
+    const f = mockFetch({ info: { license: 'BSD 3-Clause OR Apache-2.0', classifiers: [] } });
+    expect((await fetchPypiLicense('uritemplate', null, f)).spdx).toBe(
+      'BSD-3-Clause OR Apache-2.0',
+    );
+  });
+
+  it('版を欠く総称は式の中でも補わない', async () => {
+    // "BSD-3-Clause OR GPL" は綴りではなく版が欠けている。ここで
+    // GPL-3.0-only に置き換えると、宣言に無い版を宣言されたことにする。
+    //
+    // **補わない結果、式全体が読めないものとして捨てられる（null）。**
+    // それでよい。解決器は「解析器を通ったものだけを採る」規律で動いており、
+    // ここで通してしまうと、宣言に無い版を名乗った文字列が
+    // 「読めた答え」の顔で下流に流れる。読めないものは読めないと言う
+    const f = mockFetch({ info: { license: 'BSD-3-Clause OR GPL', classifiers: [] } });
+    expect((await fetchPypiLicense('nonexistent-pkg', null, f)).spdx).toBeNull();
+  });
+
+  /**
    * ここが肝心。**式として読めない散文は、今まで通り捨てる。**
    * 受け皿にすると、ライセンス本文がまるごと「ライセンス識別子」になる。
    */

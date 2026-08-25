@@ -108,6 +108,40 @@ export function assumedFromFamily(raw: string): { declared: string; assumed: str
 }
 
 /**
+ * 式の中の各要素の**綴りだけ**を SPDX に寄せる。
+ *
+ * uritemplate は `"BSD 3-Clause OR Apache-2.0"` と宣言している。式としては
+ * 正しく、要素の綴りがハイフンでなく空白なだけ。ところが
+ * `normalizeLicenseString` は式を見つけると丸ごと素通しするので、
+ * **単体なら直せる綴りが、式の中に入った途端に直らなくなり**、
+ * 式全体が読めないものとして捨てられていた。
+ *
+ * **版を補う正規化はここでは採らない。** `GPL` → `GPL-3.0-only` は
+ * 綴りの修正ではなく、宣言に無い版を名乗る主張になる。単体なら
+ * 「補った」と欄で開示できるが、式の中には開示する場所が無い。
+ * 族の総称はそのまま残し、読めなかったものとして扱わせる。
+ *
+ * `WITH` の右側は例外 ID なので触らない（既知の識別子に一致しない限り
+ * `normalizeLicenseString` は文字列を変えないため、自然にそうなる）。
+ */
+export function normalizeExpressionOperands(raw: string): string {
+  return raw
+    .split(/(\s+(?:AND|OR|WITH)\s+|[()])/i)
+    .map((part) => {
+      const operand = part.trim();
+      if (operand === '' || operand === '(' || operand === ')') return part;
+      if (/^(AND|OR|WITH)$/i.test(operand)) return part;
+
+      // 版を欠く総称は綴りの問題ではない。ここで版を決めない
+      if (assumedFromFamily(operand) !== null) return part;
+
+      const normalized = normalizeLicenseString(operand);
+      return normalized === operand ? part : part.replace(operand, normalized);
+    })
+    .join('');
+}
+
+/**
  * 単一のライセンス表記を正規化する。
  * SPDX 式（OR / AND / WITH を含むもの）はパーサに任せるため触らない。
  * 未知の文字列はそのまま返す。勝手に決めつけない。

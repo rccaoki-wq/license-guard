@@ -1,6 +1,6 @@
 import parse from 'spdx-expression-parse';
 import { fetchJson, fetchTextHead } from './http';
-import { normalizeLicenseString } from '../policy/normalize';
+import { normalizeExpressionOperands, normalizeLicenseString } from '../policy/normalize';
 import { categorize } from '../policy/categories';
 import type { LicenseLookup } from './index';
 
@@ -154,9 +154,13 @@ function fromRawLicenseString(value: string | null): string | null {
    * 受け皿を作らないのが肝心 —— 形式判定の最後を受け皿にすると、
    * 壊れた入力が「正しい答え」の顔で返ってくる。
    */
+  // 式の形は正しいのに要素の綴りだけが SPDX と違うことがある
+  // （uritemplate の "BSD 3-Clause OR Apache-2.0"）。綴りを寄せてから
+  // 解析器に通す。**通ったものだけを採る規律は変えない。**
+  const spelled = normalizeExpressionOperands(normalized);
   try {
-    parse(normalized);
-    return normalized;
+    parse(spelled);
+    return spelled;
   } catch {
     // 式として読めない。散文なので捨てる
   }

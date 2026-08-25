@@ -1,7 +1,11 @@
 import parse from 'spdx-expression-parse';
 import { evaluateLicense } from './rules';
 import { categorize } from './categories';
-import { assumedFromFamily, normalizeLicenseString } from './normalize';
+import {
+  assumedFromFamily,
+  normalizeExpressionOperands,
+  normalizeLicenseString,
+} from './normalize';
 import type { LicenseCategory, Obligation, PolicyContext, PolicyResult, Verdict } from '../types';
 
 const SEVERITY: Record<Verdict, number> = {
@@ -322,12 +326,28 @@ export function evaluateExpression(
     }
 
     /**
+     * 式の形は正しいのに、要素の綴りだけが SPDX と違うことがある
+     * （`"BSD 3-Clause OR Apache-2.0"`）。`normalizeLicenseString` は
+     * 式を見つけると丸ごと素通しするので、**単体なら直せる綴りが
+     * 式の中では直らない。** 要素ごとに寄せ直してからもう一度読む。
+     * 版の補完はしないので、判定が緩む方向には働かない。
+     */
+    const spelled = normalizeExpressionOperands(normalized);
+    if (spelled !== normalized) {
+      try {
+        return withNote(evalNode(parse(spelled) as Node, ctx).result);
+      } catch {
+        // 綴りを寄せてもなお読めない。下の救済に回す
+      }
+    }
+
+    /**
      * 演算子を含む式でも、読めた要素の答えは残す。
      * 読めなかった要素は取り除かず印に置き換えたまま評価するので、
      * AND では義務が合算され、OR では選ばれない。
      * **落とした事実は必ず文章で述べる。**
      */
-    const salvaged = salvageUnreadableOperands(normalized);
+    const salvaged = salvageUnreadableOperands(spelled);
     if (salvaged !== null) {
       try {
         const result = evalNode(parse(salvaged.expression) as Node, ctx).result;
