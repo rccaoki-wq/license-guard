@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderPackageIndex } from '../../src/ui/packages';
 import { renderPackagePage } from '../../src/ui/pkg';
+import { verdictMatrix } from '../../src/policy/matrix';
 import { renderLicenseIndex } from '../../src/ui/license';
 import { buildSitemap, type SitemapPackage } from '../../src/seo/sitemap';
 import { SITE_ORIGIN } from '../../src/ui/layout';
@@ -131,6 +132,23 @@ describe('見出しは表と同じ向きを向く', () => {
     expect(html).not.toContain('no source-disclosure obligation in any of the shipping models');
     // 何を確かめるべきかを言う
     expect(html).toContain('restrict how the software may be used');
+  });
+
+  /**
+   * 判定と義務は別の軸。MPL-2.0 と EPL-2.0 は全行 allowed だが
+   * `source-disclosure` を持つ。評価器が返している義務を、その出力を
+   * 描いている見出しが否定してはならない。
+   */
+  it('全行 allowed でも、開示義務があるなら「無い」と言わない', () => {
+    for (const spdx of ['MPL-2.0', 'EPL-2.0']) {
+      const rows = verdictMatrix(spdx, 'runtime', 'static');
+      expect(rows.every((r) => r.verdict === 'allowed')).toBe(true);
+      expect(rows.some((r) => r.obligations.includes('source-disclosure'))).toBe(true);
+
+      const html = renderPackagePage({ ecosystem: 'go', name: 'github.com/x/y', spdx });
+      expect(html).not.toContain('no source-disclosure obligation');
+      expect(html).toContain('carries a source-disclosure obligation');
+    }
   });
 
   it('本当に緩いものには、残る義務だけを添える', () => {

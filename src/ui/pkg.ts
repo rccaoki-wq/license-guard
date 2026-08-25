@@ -47,6 +47,11 @@ export function packagePath(ecosystem: Ecosystem, name: string): string {
     : `/pkg/${ecosystem}/${encodeURIComponent(name)}`;
 }
 
+/** 「5 of the 5」は読みにくい。全部なら全部と言う */
+function countOf5(n: number): string {
+  return n === 5 ? 'all 5' : `${n} of the 5`;
+}
+
 export function renderPackagePage(input: PackagePageInput): string {
   const { ecosystem, name, spdx } = input;
   const linkage = DEFAULT_LINKAGE[ecosystem];
@@ -58,31 +63,41 @@ export function renderPackagePage(input: PackagePageInput): string {
   const eco = ECOSYSTEM_LABEL[ecosystem];
 
   const review = rows.filter((r) => r.verdict === 'review');
+  const discloses = rows.some((r) => r.obligations.includes('source-disclosure'));
 
   /**
-   * **「妨げない」で締めてよいのは、本当に何も残っていない場合だけ。**
+   * **判定（verdict）と義務（obligation）は別の軸。**
    *
-   * 以前は blocked の有無だけで分けていた。BUSL-1.1 のような
-   * ソース利用可型は 1 つも blocked にならず review だけが並ぶので、
-   * 5 行すべてが「要確認」と書かれている表の真上に
-   * 「どの配布形態でもソース開示義務は生じません」と出ていた。
-   * 表と見出しが逆を向いていて、**読み流す人ほど緩い方を受け取る**。
+   * 見出しは長らく blocked の件数だけで分岐しながら、**義務についての
+   * 主張**をしていた。軸が違うので、次の 2 つを同時に外していた——
+   * どちらも「緩い方」に。
    *
-   * 開示義務が無いことは、義務が無いことではない。許容型にも
-   * 帰属表示は残るので、そこも「何も無い」とは言わない。
+   * - BUSL-1.1 は 1 つも blocked にならず review だけが並ぶ。5 行すべてが
+   *   「要確認」の表の真上に「開示義務は生じません」と出ていた。
+   * - MPL-2.0 と EPL-2.0 は全行 allowed だが、義務には
+   *   `source-disclosure` が入っている。**評価器が返している義務を、
+   *   その評価器の出力を描いている見出しが否定していた。**
+   *
+   * だから件数ではなく、行が実際に持っている義務から書く。
+   * 何が開示を引き起こすかは配布形態で違うので、そこは表の Why に委ねる
+   * ——見出しで法解釈を足すと、行ごとの正確な文言と食い違う。
    */
   const headline =
     blocked.length > 0
       ? `${name} is licensed under ${spdx}. That triggers obligations in ${blocked.length} of the 5 common shipping models, so whether it is safe for you depends on how you ship.`
-      : review.length > 0
-        ? `${name} is licensed under ${spdx}. It carries no source-disclosure obligation, but its terms restrict how the software may be used, so ${review.length} of the 5 shipping models below need a reading of the license itself.`
-        : // 帰属表示の有無は言い切らず、評価が返した義務から拾う。
-          // パブリックドメイン相当（Unlicense, 0BSD など）には残らない
-          `${name} is licensed under ${spdx}, which imposes no source-disclosure obligation in any of the shipping models below.${
-            rows.some((r) => r.obligations.includes('attribution'))
-              ? ' Attribution still applies.'
-              : ''
-          }`;
+      : discloses && review.length > 0
+        ? `${name} is licensed under ${spdx}. It carries a source-disclosure obligation, and ${countOf5(review.length)} of the shipping models below need a reading of the license itself.`
+        : discloses
+          ? `${name} is licensed under ${spdx}. Nothing below is blocked, but it carries a source-disclosure obligation — what triggers it differs by how you ship, so read the table.`
+          : review.length > 0
+            ? `${name} is licensed under ${spdx}. It carries no source-disclosure obligation, but its terms restrict how the software may be used, so ${countOf5(review.length)} of the shipping models below need a reading of the license itself.`
+            : // 帰属表示の有無は言い切らず、評価が返した義務から拾う。
+              // パブリックドメイン相当（Unlicense, 0BSD など）には残らない
+              `${name} is licensed under ${spdx}, which imposes no source-disclosure obligation in any of the shipping models below.${
+                rows.some((r) => r.obligations.includes('attribution'))
+                  ? ' Attribution still applies.'
+                  : ''
+              }`;
 
   const title = `Is ${name} safe for commercial use? ${spdx} license obligations`;
   const description = `${name} (${eco}) is licensed under ${spdx}. See what that requires for hosted SaaS, distributed binaries, customer delivery, internal use, and published libraries.`;
