@@ -23,6 +23,7 @@ const CATEGORY_LABEL: Record<LicenseCategory, string> = {
   'network-copyleft': 'Network copyleft',
   'source-available': 'Source available (not OSI-approved)',
   'non-commercial': 'Non-commercial only',
+  'no-derivatives': 'No modified versions',
   unknown: 'Unclassified',
   none: 'No license',
 };

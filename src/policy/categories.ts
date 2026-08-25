@@ -4,6 +4,14 @@ const EXACT: Record<string, LicenseCategory> = {
   'cc0-1.0': 'public-domain',
   unlicense: 'public-domain',
   '0bsd': 'public-domain',
+  // WTFPL の条項は「好きにしろ」の1つだけで、著作権表示の保持を求めない。
+  // permissive に置くと存在しない表示義務を作り出す
+  wtfpl: 'public-domain',
+  // **npm の "UNLICENSED" は "Unlicense" ではない。** 前者は
+  // 「このパッケージにライセンスを与えない」という宣言で、後者は
+  // パブリックドメインへの放棄。1文字違いで意味が正反対になる。
+  // ここを取り違えると、非公開パッケージが allowed で返る
+  unlicensed: 'none',
   mit: 'permissive',
   'mit-0': 'permissive',
   isc: 'permissive',
@@ -21,7 +29,6 @@ const EXACT: Record<string, LicenseCategory> = {
   // Business Source License の BSL-1.1 / BUSL-1.1 とは別物なので取り違えないこと。
   'bsl-1.0': 'permissive',
   'artistic-2.0': 'permissive',
-  wtfpl: 'permissive',
   ncsa: 'permissive',
   x11: 'permissive',
   libpng: 'permissive',
@@ -65,7 +72,15 @@ export function categorize(licenseId: string): LicenseCategory {
   if (id.startsWith('agpl-')) return 'network-copyleft';
   if (id.startsWith('lgpl-')) return 'library-copyleft';
   if (id.startsWith('gpl-')) return 'strong-copyleft';
+  // Creative Commons は条件の組み合わせで別物になる。接尾辞を見ずに
+  // 「CC-BY 系だから permissive」と倒すと、コピーレフトと改変禁止が
+  // まとめて許可になる。厳しい条件から順に判定すること
   if (id.startsWith('cc-by-nc')) return 'non-commercial';
+  if (id.startsWith('cc-by-nd')) return 'no-derivatives';
+  // ShareAlike は改変物を同じ条件で配ることを要求する。CC 自身が
+  // BY-SA 4.0 から GPL-3.0 への一方向互換を宣言しており、強いコピーレフトと
+  // 同等に扱われている
+  if (id.startsWith('cc-by-sa')) return 'strong-copyleft';
   if (id.startsWith('cc-by-')) return 'permissive';
 
   return 'unknown';

@@ -29,6 +29,7 @@ export type LicenseCategory =
   | 'network-copyleft'
   | 'source-available'
   | 'non-commercial'
+  | 'no-derivatives'
   | 'unknown'
   | 'none';
 

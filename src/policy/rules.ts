@@ -32,6 +32,16 @@ export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyRe
   const model = MODEL_LABEL[ctx.distributionModel] ?? ctx.distributionModel;
 
   if (category === 'none') {
+    // 「宣言が無い」と「与えないと宣言している」は、結論は同じでも別の事実。
+    // 理由文を共用すると、利用者は自分が読んでいる状況を取り違える
+    if (licenseId.trim().toLowerCase() === 'unlicensed') {
+      return {
+        verdict: 'blocked',
+        obligations: [],
+        rationale:
+          'UNLICENSED is npm\'s convention for a package whose author grants no license at all. It is not the Unlicense, which is a public-domain dedication with the opposite effect. No grant permitting use, copying, or redistribution is present, so any use rests on a separate agreement with the author.',
+      };
+    }
     return {
       verdict: 'blocked',
       obligations: [],
@@ -150,6 +160,16 @@ export function evaluateLicense(licenseId: string, ctx: PolicyContext): PolicyRe
         verdict: 'review',
         obligations: [],
         rationale: `${licenseId} is not an OSI-approved open source license. Licenses in this family commonly restrict offering the software as a commercial or competing service. The specific terms need individual review.`,
+      };
+
+    // 改変物の配布を許さないもの（CC の ND 系）。そのまま同梱するだけなら
+    // 条件を満たしうるが、改変した瞬間に配布できなくなる。
+    // 依存として取り込む形態によって結論が変わるため個別確認に倒す
+    case 'no-derivatives':
+      return {
+        verdict: 'review',
+        obligations: ['attribution'],
+        rationale: `${licenseId} permits redistribution of the work as-is but does not grant permission to distribute a modified version. Whether combining it into your project produces adapted material depends on how it is incorporated, so this needs individual review.`,
       };
 
     case 'non-commercial':

@@ -118,6 +118,20 @@ export function evaluateExpression(
   try {
     ast = parse(normalized) as Node;
   } catch {
+    // 式として読めなくても、識別子として分かることがある。
+    // spdx-expression-parse は大小文字に厳密だが、Cargo や PyPI の
+    // メタデータには小文字表記が実在する。ここで一律 review に積むと、
+    // 判定できたはずのものが警告に埋もれて全体が無視される。
+    //
+    // 分類は既知の識別子に一致するか、より厳しい族へ倒す接頭辞規則にしか
+    // 当たらないので、この経路が判定を緩める方向に働くことはない。
+    //
+    // ただし**単一の識別子に見えるものに限る**。`WITH` や `AND` を含む式が
+    // 読めなかった場合にこれを通すと、接頭辞だけを見て残りを無視した答えを
+    // 返してしまう（知らない例外が付いた GPL を、例外が無いものとして扱う等）
+    if (!/[\s()]/.test(normalized) && categorize(normalized) !== 'unknown') {
+      return evaluateLicense(normalized, ctx);
+    }
     return {
       verdict: 'review',
       obligations: [],

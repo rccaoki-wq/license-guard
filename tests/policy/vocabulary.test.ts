@@ -16,7 +16,6 @@ describe('SPDX 語彙の網羅', () => {
       'BlueOak-1.0.0',
       'BSL-1.0',
       'Artistic-2.0',
-      'WTFPL',
       'NCSA',
       'X11',
       'libpng',
@@ -25,6 +24,14 @@ describe('SPDX 語彙の網羅', () => {
     ]) {
       expect(categorize(id), id).toBe('permissive');
     }
+  });
+
+  it('条項を持たないものは permissive でなく public domain 相当にする', () => {
+    // permissive に置くと attribution が付く。WTFPL の唯一の条項は
+    // 「好きにしろ」で、著作権表示の保持を求めていない
+    expect(categorize('WTFPL')).toBe('public-domain');
+    expect(categorize('Unlicense')).toBe('public-domain');
+    expect(categorize('0BSD')).toBe('public-domain');
   });
 
   it('Boost(BSL-1.0) と Business Source(BSL-1.1) を取り違えない', () => {

@@ -44,9 +44,14 @@ const LEGACY_ALIASES: Record<string, string> = {
   zlib: 'Zlib',
 
   // パブリックドメイン表明
+  //
+  // **"unlicensed" をここに入れないこと。** npm の `"license": "UNLICENSED"` は
+  // 「ライセンスを与えない」という宣言であり、パブリックドメインへ放棄する
+  // `Unlicense` とは正反対の意味になる。以前ここで CC0-1.0 に寄せていたため、
+  // 非公開パッケージが「条件なしで利用可」と返っていた。
+  // 分類は categories.ts の EXACT で 'none' に落とす
   'public domain': 'CC0-1.0',
   'public-domain': 'CC0-1.0',
-  unlicensed: 'CC0-1.0',
   cc0: 'CC0-1.0',
   wtfpl: 'WTFPL',
 };
