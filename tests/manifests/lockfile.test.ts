@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parsePackageLock } from '../../src/manifests/npm-lock';
-import { detectAndParse } from '../../src/manifests';
+import { detectAndParse, MAX_LOOKUPS } from '../../src/manifests';
 import { scan } from '../../src/scan';
 
 const lock = (packages: Record<string, unknown>, version = 3) =>
@@ -145,10 +145,13 @@ describe('上限超過時のふるまい（scan 経由）', () => {
   };
 
   it('拒否せず部分的な結果を返す', async () => {
+    // 上限は実測で動く（時間の律速が取れれば上げる）。定数に紐付けておかないと、
+    // 上限を上げた瞬間にこのテストが「超過していない入力」を検査してしまう
+    const n = MAX_LOOKUPS + 51;
     const deps: Record<string, string> = {};
-    for (let i = 0; i <= 250; i++) deps[`p${i}`] = '1.0.0';
+    for (let i = 0; i < n; i++) deps[`p${i}`] = '1.0.0';
     const r = await scan(JSON.stringify({ dependencies: deps }), 'saas', emptyCache, fetchers);
-    expect(r.summary.total).toBe(251);
+    expect(r.summary.total).toBe(n);
     expect(r.findings.some((f) => f.resolvedFrom === 'not-checked')).toBe(true);
   });
 

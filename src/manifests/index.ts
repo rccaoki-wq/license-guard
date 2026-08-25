@@ -20,8 +20,20 @@ import type { Dependency, Ecosystem } from '../types';
  * 上限が無いと 1 リクエストで数千の外部フェッチが走り、Worker の
  * サブリクエスト上限と実行時間を使い切るうえ、無認証の公開
  * エンドポイントとして濫用される。
+ *
+ * **何がこの数字を決めているか。** かつては実行時間だった。固定幅バッチと
+ * 1 件ずつのキャッシュ往復で 200 件に約 18 秒かかり、20 秒の予算をほぼ
+ * 使い切っていた（実測: nushell 911 件で 32% が未確認）。滑走窓と
+ * 一括キャッシュに変えて 338 件・完全新規が 3.6 秒になり、時間は
+ * 律速でなくなった。
+ *
+ * 今の律速は Worker の**サブリクエスト上限（1000/リクエスト）**。
+ * 1 件あたりの外部フェッチは最悪 3 回（Go は deps.dev → goproxy →
+ * ClearlyDefined、crates.io は固定版が空振りすると基底 URL へもう一度）。
+ * 300 × 3 = 900 で枠に収まる。これ以上は時間ではなく上限に当たって
+ * 落ちるので、上げるなら先にフェッチ回数の方を減らすこと。
  */
-export const MAX_LOOKUPS = 200;
+export const MAX_LOOKUPS = 300;
 
 export interface ParsedManifest {
   ecosystem: Ecosystem;

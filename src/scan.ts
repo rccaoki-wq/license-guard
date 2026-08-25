@@ -170,7 +170,9 @@ export async function scan(
   });
 
   const resolver = new LicenseResolver(cache, fetchers);
-  const resolved = await resolver.resolveAll(toResolve, deadline);
+  // 費用の見積もりで既に引いてある。渡さないと resolve() が
+  // 1 件ずつ D1 を引き直し、ヒットしている分がまるごと往復になる
+  const resolved = await resolver.resolveAll(toResolve, deadline, cached);
 
   // 元の並び順に戻す
   const resolutions: Array<(typeof resolved)[number]> = [];

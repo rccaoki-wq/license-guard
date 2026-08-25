@@ -106,7 +106,17 @@ export class LicenseResolver {
     private readonly fetchers: Fetchers = defaultFetchers,
   ) {}
 
-  async resolve(dep: Dependency): Promise<Resolution> {
+  async resolve(
+    dep: Dependency,
+    /**
+     * 呼び出し側が既に一括で引いた結果。渡された場合は 1 件ずつの
+     * 往復を**しない**。scan は費用の見積もりのために必ず getMany を
+     * 撃っており、その結果を捨てて引き直すと、既知の依存がそのまま
+     * 往復に化ける。大きなロックファイルでは大半が既知なので、
+     * ここが実時間を支配する。
+     */
+    prefetched?: Map<string, { spdx: string | null; source: string }>,
+  ): Promise<Resolution> {
     // ロックファイルに記録された値は、実際に導入される版そのものの情報。
     // 上流に問い合わせる理由が無く、レジストリより確かでもある。
     if (dep.declaredLicense) {
@@ -115,7 +125,10 @@ export class LicenseResolver {
 
     // キャッシュは最適化であり、その失敗が解決処理を壊してはならない。
     // D1 のクォータ枯渇などで読み書きが落ちても、レジストリ照会は続行する。
-    const cached = await this.cache.get(dep).catch(() => null);
+    const cached =
+      prefetched === undefined
+        ? await this.cache.get(dep).catch(() => null)
+        : (prefetched.get(`${dep.ecosystem}|${dep.name}|${dep.version}`) ?? null);
 
     // キャッシュヒットでも出所は保つ。「固定版由来」か「最新版由来」かは
     // 利用者の判断を変えるため、キャッシュを経ただけで失ってはならない。
@@ -156,28 +169,48 @@ export class LicenseResolver {
    * 3 分待っても応答が返らなかった。**応答しないのが最悪の結果**で、
    * 一部未確認は既に正しく表示できる（NOT_CHECKED_RESULT）。
    */
-  async resolveAll(deps: Dependency[], deadline?: number): Promise<Resolution[]> {
+  async resolveAll(
+    deps: Dependency[],
+    deadline?: number,
+    prefetched?: Map<string, { spdx: string | null; source: string }>,
+  ): Promise<Resolution[]> {
     const out: Resolution[] = new Array(deps.length);
 
-    for (let i = 0; i < deps.length; i += CONCURRENCY) {
-      const left = deadline === undefined ? Infinity : deadline - Date.now();
-      if (left <= 0) {
-        for (let j = i; j < deps.length; j++) {
-          out[j] = { spdx: null, resolvedFrom: 'not-checked' };
-        }
-        break;
-      }
+    // 固定幅バッチではなく滑走窓にする。固定幅だと 1 バッチはその中で
+    // **最も遅い 1 件**の速さになり、上流の応答時間は裾が長いので
+    // 中央値ではなく毎バッチの最大値が積み上がる。実測で crates.io の
+    // 200 件が 18 秒（≒ 12.5 バッチ × 1.4 秒）かかっていたのはこれで、
+    // 20 秒の予算をほぼ使い切っていた。空いた枠に次を流し込めば、
+    // 遅い件どうしが重なって待ち時間を共有する。
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const i = next++;
+        if (i >= deps.length) return;
 
-      const batch = deps.slice(i, i + CONCURRENCY);
-      // バッチの手前だけで見ると、締切の直前に始まった 1 バッチが丸ごと
-      // 走り切る。詰まるのはまさにその 1 バッチなので、残り時間で
-      // 打ち切らないと「締切 + 上流タイムアウト」まで伸びて保証にならない。
-      const results = await Promise.all(
-        batch.map((d) => (left === Infinity ? this.resolve(d) : withCutoff(this.resolve(d), left))),
-      );
-      results.forEach((r, j) => {
-        out[i + j] = r;
-      });
+        const left = deadline === undefined ? Infinity : deadline - Date.now();
+        if (left <= 0) {
+          // 締切を過ぎたら、残りは自分も他の worker も照会しない
+          next = deps.length;
+          out[i] = { spdx: null, resolvedFrom: 'not-checked' };
+          return;
+        }
+
+        // 締切の直前に始まった 1 件が丸ごと走り切ると「締切 + 上流
+        // タイムアウト」まで伸びる。詰まるのはまさにその 1 件なので、
+        // 残り時間そのもので打ち切らないと予算の保証にならない。
+        const p = this.resolve(deps[i]!, prefetched);
+        out[i] = left === Infinity ? await p : await withCutoff(p, left);
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, deps.length) }, () => worker()),
+    );
+
+    // 締切で worker が抜けた後ろは、誰も書いていない
+    for (let i = 0; i < deps.length; i++) {
+      out[i] ??= { spdx: null, resolvedFrom: 'not-checked' };
     }
 
     return out;
