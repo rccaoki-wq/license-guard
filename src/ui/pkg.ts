@@ -57,10 +57,32 @@ export function renderPackagePage(input: PackagePageInput): string {
   const blocked = rows.filter((r) => r.verdict === 'blocked');
   const eco = ECOSYSTEM_LABEL[ecosystem];
 
+  const review = rows.filter((r) => r.verdict === 'review');
+
+  /**
+   * **「妨げない」で締めてよいのは、本当に何も残っていない場合だけ。**
+   *
+   * 以前は blocked の有無だけで分けていた。BUSL-1.1 のような
+   * ソース利用可型は 1 つも blocked にならず review だけが並ぶので、
+   * 5 行すべてが「要確認」と書かれている表の真上に
+   * 「どの配布形態でもソース開示義務は生じません」と出ていた。
+   * 表と見出しが逆を向いていて、**読み流す人ほど緩い方を受け取る**。
+   *
+   * 開示義務が無いことは、義務が無いことではない。許容型にも
+   * 帰属表示は残るので、そこも「何も無い」とは言わない。
+   */
   const headline =
-    blocked.length === 0
-      ? `${name} is licensed under ${spdx}, which imposes no source-disclosure obligation in any of the shipping models below.`
-      : `${name} is licensed under ${spdx}. That triggers obligations in ${blocked.length} of the 5 common shipping models, so whether it is safe for you depends on how you ship.`;
+    blocked.length > 0
+      ? `${name} is licensed under ${spdx}. That triggers obligations in ${blocked.length} of the 5 common shipping models, so whether it is safe for you depends on how you ship.`
+      : review.length > 0
+        ? `${name} is licensed under ${spdx}. It carries no source-disclosure obligation, but its terms restrict how the software may be used, so ${review.length} of the 5 shipping models below need a reading of the license itself.`
+        : // 帰属表示の有無は言い切らず、評価が返した義務から拾う。
+          // パブリックドメイン相当（Unlicense, 0BSD など）には残らない
+          `${name} is licensed under ${spdx}, which imposes no source-disclosure obligation in any of the shipping models below.${
+            rows.some((r) => r.obligations.includes('attribution'))
+              ? ' Attribution still applies.'
+              : ''
+          }`;
 
   const title = `Is ${name} safe for commercial use? ${spdx} license obligations`;
   const description = `${name} (${eco}) is licensed under ${spdx}. See what that requires for hosted SaaS, distributed binaries, customer delivery, internal use, and published libraries.`;

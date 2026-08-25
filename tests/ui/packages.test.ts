@@ -111,3 +111,37 @@ describe('/packages への到達経路', () => {
     expect(html).toContain('href="/packages"');
   });
 });
+
+describe('見出しは表と同じ向きを向く', () => {
+  /**
+   * **緩い方に外れるのは、この製品が最もしてはいけない誤り。**
+   *
+   * blocked の有無だけで見出しを分けていたとき、BUSL-1.1 のような
+   * ソース利用可型は 1 つも blocked にならないので、5 行すべてが
+   * 「要確認」の表の真上に「どの配布形態でもソース開示義務は生じません」と
+   * 出ていた。表を読まずに見出しだけ見た人は、配って良いと受け取る。
+   */
+  it('要確認しか無いライセンスに「開示義務なし」で締めない', () => {
+    const html = renderPackagePage({
+      ecosystem: 'go',
+      name: 'github.com/hashicorp/vault',
+      spdx: 'BUSL-1.1',
+    });
+    expect(html).toContain('Needs review');
+    expect(html).not.toContain('no source-disclosure obligation in any of the shipping models');
+    // 何を確かめるべきかを言う
+    expect(html).toContain('restrict how the software may be used');
+  });
+
+  it('本当に緩いものには、残る義務だけを添える', () => {
+    const html = renderPackagePage({ ecosystem: 'npm', name: 'express', spdx: 'MIT' });
+    expect(html).toContain('no source-disclosure obligation in any of the shipping models');
+    // 「開示義務が無い」は「義務が無い」ではない
+    expect(html).toContain('Attribution still applies.');
+  });
+
+  it('コピーレフトはこれまでどおり件数で言う', () => {
+    const html = renderPackagePage({ ecosystem: 'npm', name: 'nodebb', spdx: 'GPL-3.0-only' });
+    expect(html).toMatch(/triggers obligations in \d of the 5 common shipping models/);
+  });
+});
