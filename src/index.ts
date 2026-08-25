@@ -278,6 +278,9 @@ async function packageApi(
       verdict: r.verdict,
       obligations: r.obligations,
       rationale: r.rationale,
+      // 宣言が版を欠いていて補った場合のみ。rationale は補った後の識別子で
+      // 書かれているので、これが無いと呼び出し側は補われたことに気づけない
+      ...(r.assumption ? { assumption: r.assumption } : {}),
       reference,
       disclaimer: DISCLAIMER,
     },

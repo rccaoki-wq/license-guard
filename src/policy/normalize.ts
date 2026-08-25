@@ -57,6 +57,47 @@ const LEGACY_ALIASES: Record<string, string> = {
 };
 
 /**
+ * 版や条項数を欠く総称。厳しい側に倒すのは方針として妥当だが、
+ * **倒したことを黙ってはいけない。**
+ *
+ * psycopg2-binary は `LGPL` としか宣言していないのに、ページには
+ * 「LGPL-3.0-only requires ...」と書かれていた。宣言に無い版を、
+ * 宣言されたかのように書いている。LGPL-2.1 と 3.0 は条件が違うので、
+ * 読んだ人はどちらを確かめればいいのか分からないまま確信だけ持つ。
+ *
+ * 判定は変えない（厳しい側のままでよい）。**補ったことを言う**だけ。
+ */
+const FAMILY_ASSUMPTIONS: ReadonlySet<string> = new Set([
+  'bsd',
+  'bsd*',
+  'bsd license',
+  'new bsd',
+  'new bsd license',
+  'simplified bsd',
+  'apache',
+  'apache license',
+  'apache software license',
+  'gpl',
+  'lgpl',
+  'agpl',
+  'mpl',
+  'epl',
+]);
+
+/**
+ * 総称から版を補った場合に、その事実を返す。補っていなければ null。
+ * 判定文に添えるためだけに使う。
+ */
+export function assumedFromFamily(raw: string): { declared: string; assumed: string } | null {
+  const trimmed = raw.trim();
+  const key = trimmed.toLowerCase();
+  if (!FAMILY_ASSUMPTIONS.has(key)) return null;
+  const assumed = LEGACY_ALIASES[key];
+  if (assumed === undefined || assumed === trimmed) return null;
+  return { declared: trimmed, assumed };
+}
+
+/**
  * 単一のライセンス表記を正規化する。
  * SPDX 式（OR / AND / WITH を含むもの）はパーサに任せるため触らない。
  * 未知の文字列はそのまま返す。勝手に決めつけない。

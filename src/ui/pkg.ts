@@ -99,12 +99,29 @@ export function renderPackagePage(input: PackagePageInput): string {
                   : ''
               }`;
 
+  /**
+   * 宣言が版を欠いていたときの断り書き。
+   *
+   * 表の Why は補った後の識別子で書かれている（"LGPL-3.0-only requires ..."）。
+   * 断らないと、**宣言に無い版を宣言されたかのように**読ませる。
+   * LGPL-2.1 と 3.0 は条件が違うので、読んだ人はどちらを確かめればいいのか
+   * 分からないまま確信だけ持って帰る。
+   *
+   * 見出しに足すのは、ここが本文と FAQ（＝検索結果に出る抜粋）の両方で
+   * 使われる唯一の文だから。表の各行に混ぜると 5 回並んで読み飛ばされる。
+   */
+  const assumption = rows[0]?.assumption;
+  const headlineWithAssumption =
+    assumption === undefined
+      ? headline
+      : `${headline} Note that "${assumption.declared}" does not name a specific version — the stricter reading (${assumption.assumed}) is used below, so confirm the actual version against the project's own LICENSE file.`;
+
   const title = `Is ${name} safe for commercial use? ${spdx} license obligations`;
   const description = `${name} (${eco}) is licensed under ${spdx}. See what that requires for hosted SaaS, distributed binaries, customer delivery, internal use, and published libraries.`;
 
   // 本文と構造化データを同じ配列から作る
   const faqs = [
-    { question: `Is ${name} safe for commercial use?`, answer: headline },
+    { question: `Is ${name} safe for commercial use?`, answer: headlineWithAssumption },
     ...rows.map((r) => ({
       question: `Can I use ${name} (${spdx}) in ${MODEL_LABEL[r.model]!.toLowerCase()}?`,
       answer: r.rationale,
@@ -119,7 +136,7 @@ export function renderPackagePage(input: PackagePageInput): string {
 <h1>Is <code>${esc(name)}</code> safe for commercial use?</h1>
 <p class="sub"><a href="/packages">${esc(eco)} package</a> &middot; License: <a href="${known ? `/license/${encodeURIComponent(known.id)}` : '/licenses'}">${esc(spdx)}</a></p>
 
-<p>${esc(headline)}</p>
+<p>${esc(headlineWithAssumption)}</p>
 
 <h2>Can I use ${esc(name)} in SaaS, a distributed app, or internally?</h2>
 ${verdictTable(rows)}

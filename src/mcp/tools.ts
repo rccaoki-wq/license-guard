@@ -123,6 +123,17 @@ export const TOOL_DEFINITIONS = [
         verdict: { type: 'string', enum: ['allowed', 'review', 'blocked'] },
         obligations: { type: 'array', items: { type: 'string' } },
         rationale: { type: 'string' },
+        // 宣言が版を欠いていて、こちらで補った場合のみ入る。rationale は
+        // 補った後の識別子で書かれているので、**これが無いと読み手は
+        // 補われたことに気づけない**
+        assumption: {
+          type: 'object',
+          properties: {
+            declared: { type: 'string' },
+            assumed: { type: 'string' },
+          },
+          required: ['declared', 'assumed'],
+        },
         reference: { type: 'string' },
       },
       required: ['license', 'verdict', 'obligations', 'rationale'],
@@ -337,11 +348,23 @@ async function checkDependency(
     verdict: result.verdict,
     obligations: result.obligations,
     rationale: result.rationale,
+    ...(result.assumption ? { assumption: result.assumption } : {}),
     reference,
   };
 
+  /**
+   * 版を補ったなら、文章でも言う。
+   *
+   * rationale は補った後の識別子で書かれている（"LGPL-3.0-only requires ..."）。
+   * 断らずに返すと、**宣言に無い版を宣言されたかのように**読ませる。
+   * 呼び出し側が構造化出力を見るとは限らないので、本文にも載せる。
+   */
+  const assumed = result.assumption
+    ? `\n\nNote: "${result.assumption.declared}" does not name a specific version. The stricter reading (${result.assumption.assumed}) is used above \u2014 confirm the actual version against the project's own LICENSE file.`
+    : '';
+
   return textResult(
-    `${headline}\n\n${result.rationale}${obligations}\n\nDetails: ${reference}\n\n${DISCLAIMER}`,
+    `${headline}\n\n${result.rationale}${obligations}${assumed}\n\nDetails: ${reference}\n\n${DISCLAIMER}`,
     structured,
   );
 }

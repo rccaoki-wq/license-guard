@@ -163,3 +163,32 @@ describe('見出しは表と同じ向きを向く', () => {
     expect(html).toMatch(/triggers obligations in \d of the 5 common shipping models/);
   });
 });
+
+describe('版を補ったときは、ページでそう言う', () => {
+  it('LGPL としか宣言していないなら、3.0 を断りなく書かない', () => {
+    const html = renderPackagePage({
+      ecosystem: 'pypi',
+      name: 'psycopg2-binary',
+      spdx: 'LGPL',
+    });
+
+    // 表の Why は補った後の識別子で書かれている。だから断りが要る
+    expect(html).toContain('LGPL-3.0-only');
+    expect(html).toContain('&quot;LGPL&quot; does not name a specific version');
+    expect(html).toContain('confirm the actual version');
+
+    // 出る場所は「本文の要約」「FAQ」「JSON-LD」の 3 つだけ。
+    // 表の 5 行に混ぜると同じ一文が 5 回並び、定型文として読み飛ばされる
+    expect(html.split('does not name a specific version').length - 1).toBe(3);
+    expect(html).not.toContain(
+      '<td>&quot;LGPL&quot; does not name a specific version',
+    );
+  });
+
+  it('版まで宣言されているものに断りを足さない', () => {
+    for (const spdx of ['MIT', 'Apache-2.0', 'AGPL-3.0-only']) {
+      const html = renderPackagePage({ ecosystem: 'npm', name: 'x', spdx });
+      expect(html).not.toContain('does not name a specific version');
+    }
+  });
+});

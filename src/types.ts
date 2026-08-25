@@ -77,6 +77,14 @@ export interface PolicyResult {
   obligations: Obligation[];
   /** 条項を引用した事実ベースの説明。法的助言の表現を含めないこと */
   rationale: string;
+  /**
+   * 宣言が版を欠いていたため、こちらで補ったことを表す。
+   *
+   * `rationale` は補った後の識別子で書かれる（"LGPL-3.0-only requires ..."）。
+   * それ自体は宣言に無い版なので、**補ったという事実を別に持たせる**。
+   * 文章に混ぜると 5 行の表で 5 回繰り返され、定型文として読み飛ばされる。
+   */
+  assumption?: { declared: string; assumed: string };
 }
 
 /**

@@ -14,6 +14,8 @@ export interface MatrixRow {
   verdict: Verdict;
   obligations: Obligation[];
   rationale: string;
+  /** 宣言が版を欠いていて補った場合のみ。全行で同じ値になる */
+  assumption?: { declared: string; assumed: string };
 }
 
 /**
@@ -29,6 +31,12 @@ export function verdictMatrix(
 ): MatrixRow[] {
   return ALL_DISTRIBUTION_MODELS.map((model) => {
     const r = evaluateExpression(expression, { scope, linkage, distributionModel: model });
-    return { model, verdict: r.verdict, obligations: r.obligations, rationale: r.rationale };
+    return {
+      model,
+      verdict: r.verdict,
+      obligations: r.obligations,
+      rationale: r.rationale,
+      ...(r.assumption ? { assumption: r.assumption } : {}),
+    };
   });
 }

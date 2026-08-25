@@ -1,7 +1,7 @@
 import parse from 'spdx-expression-parse';
 import { evaluateLicense } from './rules';
 import { categorize } from './categories';
-import { normalizeLicenseString } from './normalize';
+import { assumedFromFamily, normalizeLicenseString } from './normalize';
 import type { Obligation, PolicyContext, PolicyResult, Verdict } from '../types';
 
 const SEVERITY: Record<Verdict, number> = {
@@ -114,6 +114,26 @@ export function evaluateExpression(
   // 旧 npm 表記（"MIT/X11" 等）は SPDX として解釈できないため先に寄せる
   const normalized = normalizeLicenseString(expression);
 
+  /**
+   * 総称に版を補ったなら、それを判定文の先頭で言う。
+   *
+   * 補った版を宣言されたかのように書くと、**宣言に無い事実を断言する**
+   * ことになる。psycopg2-binary は `LGPL` としか宣言していないのに、
+   * ページには「LGPL-3.0-only requires ...」と出ていた。LGPL-2.1 と 3.0 は
+   * 条件が違うので、読んだ人はどちらを確かめればいいのか分からないまま
+   * 確信だけ持って帰る。
+   *
+   * **判定は変えない。** 厳しい側に倒すのは方針として妥当。
+   * 補ったという事実だけを渡す。
+   *
+   * 文章に前置きすると、5 つの配布形態すべてに同じ一文が付く。
+   * 5 回並んだ定型文は読み飛ばされるので、**構造化して 1 つの欄に持つ**。
+   * 表示側が 1 度だけ出し、API は文字列を解析せずに受け取れる。
+   */
+  const assumed = assumedFromFamily(expression);
+  const withNote = (r: PolicyResult): PolicyResult =>
+    assumed === null ? r : { ...r, assumption: assumed };
+
   let ast: Node;
   try {
     ast = parse(normalized) as Node;
@@ -130,7 +150,7 @@ export function evaluateExpression(
     // 読めなかった場合にこれを通すと、接頭辞だけを見て残りを無視した答えを
     // 返してしまう（知らない例外が付いた GPL を、例外が無いものとして扱う等）
     if (!/[\s()]/.test(normalized) && categorize(normalized) !== 'unknown') {
-      return evaluateLicense(normalized, ctx);
+      return withNote(evaluateLicense(normalized, ctx));
     }
     return {
       verdict: 'review',
@@ -139,5 +159,5 @@ export function evaluateExpression(
     };
   }
 
-  return evalNode(ast, ctx);
+  return withNote(evalNode(ast, ctx));
 }
