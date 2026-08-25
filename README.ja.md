@@ -6,7 +6,7 @@
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.rccaoki--wq%2Flicense--guard-0a7c3f)](https://registry.modelcontextprotocol.io/v0/servers?search=license-guard)
 [![License](https://img.shields.io/badge/license-Apache--2.0-1a5fd0)](LICENSE)
 
-[Smithery](https://smithery.ai/servers/rcc-aoki/license-guard) と [Docker MCP カタログ](https://github.com/docker/mcp-registry) にも掲載。
+[mcpservers.org](https://mcpservers.org/servers/rccaoki-wq/license-guard)、[Smithery](https://smithery.ai/servers/rcc-aoki/license-guard)、[TensorBlock MCP Index](https://www.tensorblock.co/mcp/servers/github-rccaoki-wq-license-guard-1818e624)、[Docker MCP カタログ](https://github.com/docker/mcp-registry) にも掲載。
 
 依存 OSS のライセンスが、あなたの**配布モデル**に対して法的義務を発生させるかを判定するツール。
 
