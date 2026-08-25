@@ -11,18 +11,20 @@ import type { Dependency, Ecosystem } from '../types';
  * いずれもライセンスを内包しないため、解決には上流照会か共有キャッシュが要る。
  */
 export function parseTomlPackages(content: string, ecosystem: Ecosystem): Dependency[] {
-  const found = new Map<string, string | null>();
+  const found = new Map<string, { version: string | null; origin?: Dependency['origin'] }>();
 
   let inPackage = false;
   let name: string | null = null;
   let version: string | null = null;
+  let source: string | null = null;
 
   const flush = () => {
     if (name !== null && isSafePackageName(name) && !found.has(name)) {
-      found.set(name, version);
+      found.set(name, { version, origin: originOf(ecosystem, source) });
     }
     name = null;
     version = null;
+    source = null;
   };
 
   for (const raw of content.split(/\r?\n/)) {
@@ -44,19 +46,40 @@ export function parseTomlPackages(content: string, ecosystem: Ecosystem): Depend
 
     if (!inPackage) continue;
 
-    const m = /^(name|version)\s*=\s*"([^"]*)"\s*$/.exec(line);
+    const m = /^(name|version|source)\s*=\s*"([^"]*)"\s*$/.exec(line);
     if (!m) continue;
     if (m[1] === 'name') name = m[2]!;
-    else version = m[2]!;
+    else if (m[1] === 'version') version = m[2]!;
+    else source = m[2]!;
   }
   flush();
 
   return [...found].map(([n, v]) => ({
     ecosystem,
     name: n,
-    version: v,
+    version: v.version,
     scope: 'runtime' as const,
+    ...(v.origin ? { origin: v.origin } : {}),
   }));
+}
+
+/**
+ * Cargo.lock の `source` 行から、公開レジストリを引く意味があるかを決める。
+ *
+ * **Cargo.lock に対してだけ判定する。** poetry.lock / uv.lock も
+ * `[[package]]` 形式だが source 行を持たず、しかし PyPI には存在する。
+ * 「source が無い = 内部」を全形式に広げると、解決できる依存を
+ * まとめて照会しなくなる。分からないときは undefined を返し、
+ * 従来どおり照会する側に倒す。
+ */
+function originOf(ecosystem: Ecosystem, source: string | null): Dependency['origin'] {
+  if (ecosystem !== 'cargo') return undefined;
+  // source 行が無いのはこのワークスペース自身のメンバー（自分のクレート）
+  if (source === null) return 'workspace';
+  if (source.startsWith('git+')) return 'git';
+  // registry+https://github.com/rust-lang/crates.io-index が既定。
+  // sparse+ の私設レジストリや、crates.io 以外のミラーはここに入る
+  return source.includes('crates.io-index') ? 'registry' : 'other-registry';
 }
 
 /** Cargo.lock か（poetry / uv と区別するため source を見る） */

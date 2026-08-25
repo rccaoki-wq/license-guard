@@ -20,10 +20,12 @@ dependencies = [
 ]
 `;
 
-  it('name と version を取り出す', () => {
+  it('name と version と出所を取り出す', () => {
+    // source 行を持たない 2 つめは、この Cargo.lock 自身のワークスペース
+    // メンバー。crates.io を引いても無いので照会しない（tests/manifests/cargo-origin）
     expect(parseTomlPackages(cargo, 'cargo')).toEqual([
-      { ecosystem: 'cargo', name: 'serde', version: '1.0.210', scope: 'runtime' },
-      { ecosystem: 'cargo', name: 'tokio', version: '1.40.0', scope: 'runtime' },
+      { ecosystem: 'cargo', name: 'serde', version: '1.0.210', scope: 'runtime', origin: 'registry' },
+      { ecosystem: 'cargo', name: 'tokio', version: '1.40.0', scope: 'runtime', origin: 'workspace' },
     ]);
   });
 

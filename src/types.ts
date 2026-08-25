@@ -43,6 +43,20 @@ export interface Dependency {
    * 存在する場合は上流への照会が不要で、かつ実際に導入される版の情報。
    */
   declaredLicense?: string;
+  /**
+   * その依存がどこから来るか。**公開レジストリを引く意味があるかを決める。**
+   *
+   * ロックファイルによっては出所が書いてある（Cargo.lock の `source` 行）。
+   * git 依存・ワークスペースメンバー・私設レジストリの名前は crates.io に
+   * 存在しないので、照会すれば必ず空振りする。失敗は仕様上キャッシュ
+   * しない（内部パッケージ名を保存しないため）ので、毎回タイムアウトまで
+   * 待ち直し、解決できるはずの依存から予算を奪う。実測: zed の未解決
+   * 554 件のうち約 190 件がこれだった。
+   *
+   * 書いていないロックファイル形式では undefined。**推測しない** ——
+   * 「無いから内部」と決めつけると、解決できる依存を照会しなくなる。
+   */
+  origin?: 'registry' | 'workspace' | 'git' | 'other-registry';
 }
 
 export interface PolicyContext {
@@ -73,6 +87,12 @@ export type ResolvedFrom =
   | 'clearlydefined'
   /** 照会の上限に達したため確認していない。allowed と混同してはならない */
   | 'not-checked'
+  /**
+   * 公開レジストリに存在しないと分かっているため照会していない。
+   * git 依存・ワークスペースメンバー・私設レジストリ。
+   * `not-checked` とは別物 —— 上限に当たったのではなく、引く先が無い。
+   */
+  | 'not-published'
   | 'unresolved';
 
 export interface Finding extends Dependency {

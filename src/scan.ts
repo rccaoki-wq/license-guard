@@ -3,6 +3,7 @@ import { LicenseResolver, defaultFetchers } from './resolver';
 import type { CacheLike, Fetchers } from './resolver';
 import { evaluateExpression } from './policy/engine';
 import type {
+  Dependency,
   DistributionModel,
   Ecosystem,
   Finding,
@@ -56,6 +57,27 @@ const NOT_CHECKED_RESULT: PolicyResult = {
  * 不完全なページよりはるかに悪い。**
  */
 export const SCAN_BUDGET_MS = 20_000;
+
+/**
+ * 公開レジストリに存在しないと分かっている依存の判定。
+ *
+ * 上限に当たった `not-checked` とは別物で、「もう一度スキャンすれば
+ * 解決する」は嘘になる。引く先が無いのだから、次も同じ結果になる。
+ * 何を見に行けばよいかを名指しする方が実際に役に立つ。
+ *
+ * 判定は review に倒す。自分のワークスペースメンバーを blocked にすると
+ * 警告全体の信頼を落とすが、allowed にすると未確認を「問題なし」と
+ * 数えることになり、これは絶対に避ける。
+ */
+function notPublishedResult(origin: NonNullable<Dependency['origin']>): PolicyResult {
+  const detail =
+    origin === 'workspace'
+      ? 'This is a workspace member of the project itself — it has no entry in the lockfile pointing at a registry, so there is nothing to look up. Its license is whatever your own repository states.'
+      : origin === 'git'
+      ? 'This is a git dependency. The lockfile pins it to a repository and revision, not to a published release, so no registry has license metadata for it. Check the LICENSE file at that revision.'
+      : 'This comes from a registry other than crates.io, which this scan does not query. Check the license with whoever operates that registry.';
+  return { verdict: 'review', obligations: [], rationale: detail };
+}
 
 const UNRESOLVED_RESULT: PolicyResult = {
   verdict: 'review',
@@ -120,6 +142,15 @@ function limitationsFor(ecosystem: Ecosystem, findings: Finding[], transitive: b
     );
   }
 
+  // 「もう一度スキャンすれば解決する」が効かない唯一の分類なので、
+  // not-checked と一緒くたにせず、別の文で理由を言う
+  const notPublished = findings.filter((f) => f.resolvedFrom === 'not-published').length;
+  if (notPublished > 0) {
+    out.push(
+      `${notPublished} dependencies are not published on a public registry — git dependencies, members of this workspace, or crates from another registry. No registry has license data for them, so they are listed as needing review. Scanning again will not change that; the licenses have to come from the sources themselves.`,
+    );
+  }
+
   if (findings.some((f) => f.resolvedFrom === 'registry-latest')) {
     out.push(
       'Some dependencies were resolved against the latest release because the pinned version declared no license of its own, or was never published. Those entries are marked. Licenses do change between versions.',
@@ -142,26 +173,36 @@ export async function scan(
   const deadline = Date.now() + budgetMs;
   const parsed = detectAndParse(content);
 
+  // 公開レジストリに無いと分かっている依存は照会しない。空振りが確定して
+  // いるうえ、失敗は仕様上キャッシュしないので毎回タイムアウトまで待ち直し、
+  // 解決できる依存から時間と枠を奪う（実測: zed の未解決 554 件のうち約 190 件）
+  const unpublished = (d: Dependency): NonNullable<Dependency['origin']> | null =>
+    d.origin !== undefined && d.origin !== 'registry' && !d.declaredLicense ? d.origin : null;
+
   // 上限は「解析した依存の数」ではなく「実際に上流へ問い合わせる数」に掛ける。
   // 共有キャッシュが育つほど、大きなロックファイルでも照会は要らなくなる。
   const cached = cache.getMany ? await cache.getMany(parsed.dependencies) : new Map();
-  const lookups = parsed.dependencies.filter(
-    (d) => !d.declaredLicense && !(d.version && cached.has(`${d.ecosystem}|${d.name}|${d.version}`)),
-  ).length;
 
   // 上限を超えた分は照会せず、未確認として明示する。
   // 費用の上限は保ったまま、確認できた分の価値は返す。
-  const needsLookup = (d: (typeof parsed.dependencies)[number]) =>
-    !d.declaredLicense && !(d.version && cached.has(`${d.ecosystem}|${d.name}|${d.version}`));
+  const needsLookup = (d: Dependency) =>
+    !d.declaredLicense &&
+    unpublished(d) === null &&
+    !(d.version && cached.has(`${d.ecosystem}|${d.name}|${d.version}`));
 
   let budget = MAX_LOOKUPS;
   const toResolve: typeof parsed.dependencies = [];
-  const skipped = new Set<number>();
+  const skipped = new Map<number, 'not-checked' | NonNullable<Dependency['origin']>>();
 
   parsed.dependencies.forEach((d, i) => {
+    const origin = unpublished(d);
+    if (origin !== null) {
+      skipped.set(i, origin);
+      return;
+    }
     if (needsLookup(d)) {
       if (budget <= 0) {
-        skipped.add(i);
+        skipped.set(i, 'not-checked');
         return;
       }
       budget -= 1;
@@ -178,10 +219,13 @@ export async function scan(
   const resolutions: Array<(typeof resolved)[number]> = [];
   let cursor = 0;
   parsed.dependencies.forEach((_, i) => {
+    const why = skipped.get(i);
     resolutions.push(
-      skipped.has(i)
+      why === undefined
+        ? resolved[cursor++]!
+        : why === 'not-checked'
         ? { spdx: null, resolvedFrom: 'not-checked' as const }
-        : resolved[cursor++]!,
+        : { spdx: null, resolvedFrom: 'not-published' as const },
     );
   });
   const linkage = DEFAULT_LINKAGE[parsed.ecosystem];
@@ -191,6 +235,8 @@ export async function scan(
     const policy =
       res.resolvedFrom === 'not-checked'
         ? NOT_CHECKED_RESULT
+        : res.resolvedFrom === 'not-published'
+        ? notPublishedResult(dep.origin ?? 'workspace')
         : res.resolvedFrom === 'unresolved'
         ? UNRESOLVED_RESULT
         : withProvenanceNote(

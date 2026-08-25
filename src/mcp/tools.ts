@@ -180,7 +180,7 @@ export const TOOL_DEFINITIONS = [
               resolvedFrom: {
                 type: 'string',
                 description:
-                  'Where the license came from. "lockfile" is exact; "registry" and "deps-dev" are the pinned version as published; "registry-latest" means the pinned version could not be read and the latest release was used instead; "not-checked" means the lookup budget ran out and this dependency was never resolved.',
+                  'Where the license came from. "lockfile" is exact; "registry" and "deps-dev" are the pinned version as published; "registry-latest" means the pinned version could not be read and the latest release was used instead; "not-checked" means the lookup budget ran out and this dependency was never resolved; "not-published" means it is a git dependency, a member of the scanned workspace, or from a private registry, so no public registry has license data for it — re-scanning will not resolve those.',
               },
               verdict: { type: 'string', enum: VERDICTS },
               obligations: { type: 'array', items: { type: 'string' } },
