@@ -1,5 +1,6 @@
 import { fetchDepsDevGoLicense } from './depsdev';
 import { fetchGoLicense } from './clearlydefined';
+import { fetchLatestGoVersion } from './goproxy';
 import { fetchRepoLicense } from './repo-license';
 import type { LicenseLookup } from './index';
 
@@ -39,6 +40,28 @@ export async function fetchGoLicenseWithFallback(
   if (version === null) {
     const repo = await fetchRepoLicense(modulePath, fetchImpl);
     if (repo.spdx !== null) return repo;
+
+    /**
+     * **版が無いという理由で deps.dev を飛ばしていた。**
+     *
+     * リポジトリ内のサブモジュール（`aws-sdk-go-v2/service/sts` 等）は
+     * 上の repo-license が意図的に断る——親の LICENSE に支配されないため。
+     * その先で deps.dev も `version === null` で即 null を返すので、
+     * 収録率 38% の ClearlyDefined だけが残っていた。実測 300 モジュールで
+     * 26 件が「ライセンス不明」になり、**そのすべてを deps.dev は
+     * 答えられた**。最も当たる相手だけが、最もよく使う経路から外れていた。
+     *
+     * 版は推測しない。proxy.golang.org の `@latest` は一次情報で、
+     * これを確定させてから聞けば、版付きの問いとまったく同じ経路になる。
+     *
+     * `fromLatest` は立てない。npm / crates / pypi と同じ約束で、
+     * 版を指定しない問いに最新を答えるのは**落ちた**のではなく正しい答え。
+     */
+    const latest = await fetchLatestGoVersion(modulePath, fetchImpl);
+    if (latest !== null) {
+      const atLatest = await fetchDepsDevGoLicense(modulePath, latest, fetchImpl);
+      if (atLatest.spdx !== null) return { ...atLatest, source: 'deps-dev' };
+    }
   }
 
   const primary = await fetchDepsDevGoLicense(modulePath, version, fetchImpl);
