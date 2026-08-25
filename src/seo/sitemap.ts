@@ -3,6 +3,7 @@ import { packagePath } from '../ui/pkg';
 import { COMPARE_PAIRS, comparePath } from '../ui/compare';
 import { SITE_ORIGIN } from '../ui/layout';
 import { verdictMatrix } from '../policy/matrix';
+import { categorize } from '../policy/categories';
 import type { Ecosystem } from '../types';
 
 /** sitemap 1ファイルあたりの URL 上限 */
@@ -21,14 +22,40 @@ export interface SitemapPackage {
  * パッケージページの中身は名前を除いてライセンスページと同じになる。
  * そういうページを何百件も自分から提出すると、サイト全体が薄いと見なされる。
  * ページ自体は消さない（リンクから来た人には答えを返す）。提出をやめるだけ。
+ *
+ * **「結論が分かれるか」だけを見ていたため、丸ごと落ちていた層が2つある。**
+ *
+ * 1つは MPL / EPL / CDDL のようなファイル単位コピーレフト。どの配布モデルでも
+ * allowed なので落ちていたが、allowed の中身が MIT とは違う。表示を残すだけの
+ * MIT に対して、こちらは改変したファイルのソースを渡す義務が付いてくる。
+ * mdbook・syncthing・Consul・Vault・pikepdf――許容の次に多い層が 1 件も
+ * 載っていなかった。
+ *
+ * もう1つは BUSL / SSPL / Elastic。全モデル review で並ぶので落ちていた。
+ * ただしこの形は**解釈できなかった文字列と見分けが付かない**（"SEE LICENSE IN
+ * LICENSE.md" も全モデル review・義務なしになる）。行列だけでは区別できないので、
+ * ここだけは分類表に載っているかを併せて見る。載っていないものは
+ * 「分かりません」としか書けないページなので出さない。
  */
 export function packagePageSaysSomething(spdx: string): boolean {
-  const verdicts = new Set(
-    [...verdictMatrix(spdx, 'runtime', 'dynamic'), ...verdictMatrix(spdx, 'runtime', 'static')].map(
-      (r) => r.verdict,
-    ),
+  const rows = [
+    ...verdictMatrix(spdx, 'runtime', 'dynamic'),
+    ...verdictMatrix(spdx, 'runtime', 'static'),
+  ];
+
+  // 表示を維持する以上に、こちらが手を動かす必要がある義務。
+  // attribution と patent-grant は許容ライセンスにも付くので数えない
+  const mustAct = rows.some((r) =>
+    r.obligations.some((o) => o === 'source-disclosure' || o === 'same-license'),
   );
-  return verdicts.size > 1;
+  if (mustAct) return true;
+
+  // 使い方で結論が分かれるなら、自分がどちら側かがそのページの答えになる
+  if (new Set(rows.map((r) => r.verdict)).size > 1) return true;
+
+  // 義務は無いが allowed でもない＝利用そのものに条件が付く型。
+  // 分類できたものに限る（上のコメント参照）
+  return rows.every((r) => r.verdict !== 'allowed') && categorize(spdx) !== 'unknown';
 }
 
 function xmlEscape(s: string): string {

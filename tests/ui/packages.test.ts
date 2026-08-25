@@ -51,6 +51,21 @@ describe('renderPackageIndex', () => {
     expect(html).toMatch(/link|linked|linking/i);
   });
 
+  // MPL・EPL・CDDL は全モデル allowed だが、リンク方式を変えても答えは
+  // 変わらない。ここに LGPL 向けの「静的リンクなら話が違う」を出すと、
+  // 読者は義務が無い前提で静的リンクを避けるという逆の対処をする
+  it('リンク方式で変わらないものに「リンク方式次第」と書かない', () => {
+    for (const spdx of ['MPL-2.0', 'EPL-2.0', 'CDDL-1.0']) {
+      const html = renderPackageIndex([{ ecosystem: 'npm', name: 'somelib', spdx }]);
+      expect(html, spdx).toContain('/pkg/npm/somelib');
+      // JSON-LD にも同じ経路が出るので、一覧の <li> だけを取り出して見る
+      const li = /<li><a href="\/pkg\/npm\/somelib">.*?<\/li>/s.exec(html)?.[0] ?? '';
+      expect(li, spdx).not.toMatch(/linked dynamically|how it is linked/);
+      // 代わりに、何をしなければならないかを書く
+      expect(li, spdx).toMatch(/source/i);
+    }
+  });
+
   it('エコシステムごとにまとめる', () => {
     const html = renderPackageIndex(PACKAGES);
     expect(html).toContain('npm');

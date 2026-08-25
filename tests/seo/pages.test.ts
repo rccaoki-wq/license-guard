@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { renderLicenseIndex, renderLicensePage } from '../../src/ui/license';
 import { renderPackageNotFound, renderPackagePage, packagePath } from '../../src/ui/pkg';
 import { LICENSE_CATALOG, findLicense } from '../../src/seo/catalog';
-import { buildRobotsTxt, buildSitemap } from '../../src/seo/sitemap';
+import { buildRobotsTxt, buildSitemap, packagePageSaysSomething } from '../../src/seo/sitemap';
+import { verdictMatrix } from '../../src/policy/matrix';
 import { renderPage } from '../../src/ui/page';
 import { SITE_ORIGIN } from '../../src/ui/layout';
 
@@ -225,5 +226,61 @@ describe('renderPage（ツール）', () => {
 
   it('有料レポートCTAを含む', () => {
     expect(renderPage()).toContain('id="cta-paid-report"');
+  });
+});
+
+describe('パッケージページを提出するかの判断', () => {
+  it('結論が変わらなくても、義務があれば載せる', () => {
+    // MPL / EPL / CDDL はどの配布モデルでも allowed で、**義務も配布モデルで
+    // 変わらない**。だから「結論が分かれるか」でも「義務が分かれるか」でも
+    // 引っ掛からず、1 件も載っていなかった。
+    //
+    // だが同じ allowed でも中身が MIT とは違う。表示を残すだけの MIT に対し、
+    // こちらは改変したファイルのソースを渡す義務が付く。**そこが知りたくて
+    // 調べに来る。** mdbook・syncthing・Consul・Vault・pikepdf・jointjs――
+    // 許容ライセンスの次に多い層が丸ごと落ちていた
+    for (const id of ['MPL-2.0', 'EPL-2.0', 'CDDL-1.0', 'MS-PL']) {
+      const rows = verdictMatrix(id, 'runtime', 'dynamic');
+      expect(new Set(rows.map((r) => r.verdict)).size, id).toBe(1);
+      expect(new Set(rows.map((r) => r.obligations.join('+'))).size, id).toBe(1);
+      expect(packagePageSaysSomething(id), id).toBe(true);
+    }
+  });
+
+  it('許容ライセンスは載せない', () => {
+    // 義務が attribution だけ＝表示を残す以外にすることが無い。
+    // ページの中身はライセンスページの言い直しになる
+    for (const id of ['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0', 'Unlicense', '0BSD']) {
+      expect(packagePageSaysSomething(id), id).toBe(false);
+    }
+  });
+
+  it('コピーレフトは引き続き載せる', () => {
+    for (const id of ['GPL-3.0-only', 'AGPL-3.0-only', 'LGPL-3.0-only']) {
+      expect(packagePageSaysSomething(id), id).toBe(true);
+    }
+  });
+
+  it('ソース利用可型は載せる', () => {
+    // 全モデル review・義務なしで並ぶので、行列だけを見ると
+    // 「解釈できなかった文字列」と完全に同じ形をしている。
+    // 分類表に載っていることで区別する
+    for (const id of ['BUSL-1.1', 'SSPL-1.0', 'Elastic-2.0']) {
+      expect(packagePageSaysSomething(id), id).toBe(true);
+    }
+  });
+
+  it('読めない文字列は載せない', () => {
+    // 上と同じ「全モデル review・義務なし」でも、こちらは分類できない。
+    // ページは「分かりません」としか言わないので、検索から来た人の役に立たない。
+    // npm の "SEE LICENSE IN ..." や ClearlyDefined の NOASSERTION が該当する
+    for (const junk of [
+      'SEE LICENSE IN LICENSE.md',
+      'Commercial',
+      'https://example.com/license',
+      'NOASSERTION',
+    ]) {
+      expect(packagePageSaysSomething(junk), junk).toBe(false);
+    }
   });
 });
