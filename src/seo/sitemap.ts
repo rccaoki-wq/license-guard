@@ -38,6 +38,18 @@ export interface SitemapPackage {
  * 「分かりません」としか書けないページなので出さない。
  */
 export function packagePageSaysSomething(spdx: string): boolean {
+  // npm の "UNLICENSED" は「このパッケージに許諾を与えない」という宣言で、
+  // ほぼ常に非公開パッケージに付く。**これを提出してはいけない理由が2つある。**
+  //
+  // 1つは事実の問題。実際に `color-name` が MIT と unlicensed の両方で
+  // 記録されていた（同名の私物が誰かの lockfile に入っていた）。どちらの行を
+  // 見るかで判定が変わり、公開されている MIT のパッケージについて
+  // 「許諾は無い」と書いたページを自分から提出しかねない。
+  //
+  // もう1つは、そもそも非公開パッケージの名前を検索結果に出す話になること。
+  // 解決できなかった名前を書かないのと同じ理由で、これも出さない
+  if (categorize(spdx) === 'none') return false;
+
   const rows = [
     ...verdictMatrix(spdx, 'runtime', 'dynamic'),
     ...verdictMatrix(spdx, 'runtime', 'static'),

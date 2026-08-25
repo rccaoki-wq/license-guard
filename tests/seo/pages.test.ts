@@ -270,6 +270,19 @@ describe('パッケージページを提出するかの判断', () => {
     }
   });
 
+  it('UNLICENSED は載せない（非公開パッケージの名前になる）', () => {
+    // 実際に npm の color-name が MIT と unlicensed の両方で記録されていた。
+    // 同名の私物が誰かの lockfile に入っていたということで、どちらの行を
+    // 見るかで判定が変わる。公開されている MIT のパッケージについて
+    // 「許諾は無い」と書いたページを提出する側に倒れうる。
+    // 加えて、非公開パッケージの名前を検索結果に出すこと自体をしない
+    expect(packagePageSaysSomething('UNLICENSED')).toBe(false);
+    expect(packagePageSaysSomething('unlicensed')).toBe(false);
+    // Unlicense（パブリックドメインへの放棄）は 1 文字違いの別物。
+    // こちらは義務が無いので、いずれにせよ載らない
+    expect(packagePageSaysSomething('Unlicense')).toBe(false);
+  });
+
   it('読めない文字列は載せない', () => {
     // 上と同じ「全モデル review・義務なし」でも、こちらは分類できない。
     // ページは「分かりません」としか言わないので、検索から来た人の役に立たない。
