@@ -2,13 +2,50 @@ import parse from 'spdx-expression-parse';
 import { evaluateLicense } from './rules';
 import { categorize } from './categories';
 import { assumedFromFamily, normalizeLicenseString } from './normalize';
-import type { Obligation, PolicyContext, PolicyResult, Verdict } from '../types';
+import type { LicenseCategory, Obligation, PolicyContext, PolicyResult, Verdict } from '../types';
 
 const SEVERITY: Record<Verdict, number> = {
   allowed: 0,
   review: 1,
   blocked: 2,
 };
+
+/**
+ * ライセンスそのものの強さ。**文脈に依らない。**
+ *
+ * OR の選択で、判定が並んだときの比較に使う。判定（`SEVERITY`）は
+ * 配布形態ごとに動くので、それだけで選ぶと**行ごとに違うライセンスを
+ * 選んでしまう**。`GPL-3.0-only OR MIT` は saas と internal-only では
+ * GPL（その用途では義務が発火しないので義務ゼロ）、distributed-binary
+ * では MIT が選ばれていた。行ごとには正しいが、**どの単一の選択でも
+ * 再現できない表**になる。読み手は 1 つを選んで全用途で使う。
+ */
+const CATEGORY_RANK: Record<LicenseCategory, number> = {
+  'public-domain': 0,
+  permissive: 1,
+  'file-copyleft': 2,
+  'library-copyleft': 3,
+  'strong-copyleft': 4,
+  'network-copyleft': 5,
+  'source-available': 6,
+  'no-derivatives': 7,
+  'non-commercial': 8,
+  none: 9,
+  // 読めなかったものは最後。読めた選択肢があるならそちらを採る
+  unknown: 10,
+};
+
+/**
+ * 同じ強さの中での手間の比較。
+ *
+ * **`patent-grant` は数えない。** これは利用者が負う義務ではなく、
+ * 寄稿者から利用者への特許許諾＝受け取る側の利得で、
+ * 情報として義務欄に並べているだけ（rules.ts の Apache-2.0 の項）。
+ * 手間として数えると、実際には軽い方を重いと判断してしまう。
+ */
+function burden(obligations: Obligation[]): number {
+  return obligations.filter((o) => o !== 'patent-grant').length;
+}
 
 /**
  * リンクを通じたコピーレフトの伝播を、明示的に解除する例外。
@@ -68,35 +105,77 @@ function mergeObligations(a: Obligation[], b: Obligation[]): Obligation[] {
   return [...new Set([...a, ...b])];
 }
 
-function evalNode(node: Node, ctx: PolicyContext): PolicyResult {
+/** 評価結果に、OR の比較で使うライセンス自体の強さを添えたもの */
+interface Ranked {
+  result: PolicyResult;
+  /** 文脈に依らない強さ。AND は強い方、OR は選んだ方を引き継ぐ */
+  rank: number;
+}
+
+function evalNode(node: Node, ctx: PolicyContext): Ranked {
   if ('license' in node) {
     const base = evaluateLicense(node.license, ctx);
+    const rank = CATEGORY_RANK[categorize(node.license)];
     if (node.exception && LINKING_EXCEPTIONS.has(node.exception.toLowerCase())) {
-      return applyLinkingException(node.license, node.exception, base);
+      return { result: applyLinkingException(node.license, node.exception, base), rank };
     }
-    return base;
+    return { result: base, rank };
   }
 
   const left = evalNode(node.left, ctx);
   const right = evalNode(node.right, ctx);
 
   if (node.conjunction === 'or') {
-    // 利用者がいずれかを選択できるため、緩い方を採る
-    const chosen = SEVERITY[left.verdict] <= SEVERITY[right.verdict] ? left : right;
+    /**
+     * 利用者がいずれかを選択できるため、緩い方を採る。
+     *
+     * **判定が並んだときに宣言順で決めてはいけない。** 以前は左が残って
+     * いたので、`Apache-2.0 OR MIT`（上位 300 クレート中 23 件。
+     * `MIT OR Apache-2.0` と同じ意味）で、MIT を選べば要らない
+     * `notice-file` と `patent-grant` を「least restrictive option」と
+     * 称して出していた。書き方が違うだけの同じライセンスに、
+     * 違う答えを返していたことになる。
+     *
+     * 判定は今も第一基準（緩い側が blocked なら選ばない）。並んだときだけ、
+     * ライセンス自体の強さ → 手間の順で比べる。どちらも文脈に依らないので、
+     * 配布形態が変わっても**同じライセンスが選ばれる**。
+     */
+    const chosen =
+      compareForChoice(left, right) <= 0
+        ? left
+        : right;
     return {
-      verdict: chosen.verdict,
-      obligations: chosen.obligations,
-      rationale: `This package offers a choice of licenses. The least restrictive option is shown. ${chosen.rationale}`,
+      result: {
+        verdict: chosen.result.verdict,
+        obligations: chosen.result.obligations,
+        rationale: `This package offers a choice of licenses. The least restrictive option is shown. ${chosen.result.rationale}`,
+      },
+      rank: chosen.rank,
     };
   }
 
   // AND: 全てが適用されるため、厳しい方を採り義務を合算する
-  const stricter = SEVERITY[left.verdict] >= SEVERITY[right.verdict] ? left : right;
+  const stricter =
+    SEVERITY[left.result.verdict] >= SEVERITY[right.result.verdict] ? left : right;
   return {
-    verdict: stricter.verdict,
-    obligations: mergeObligations(left.obligations, right.obligations),
-    rationale: `Multiple licenses apply at once. ${left.rationale} / ${right.rationale}`,
+    result: {
+      verdict: stricter.result.verdict,
+      obligations: mergeObligations(left.result.obligations, right.result.obligations),
+      rationale: `Multiple licenses apply at once. ${left.result.rationale} / ${right.result.rationale}`,
+    },
+    rank: Math.max(left.rank, right.rank),
   };
+}
+
+/** 負なら左、正なら右。0 なら宣言順（左）のまま */
+function compareForChoice(left: Ranked, right: Ranked): number {
+  const byVerdict = SEVERITY[left.result.verdict] - SEVERITY[right.result.verdict];
+  if (byVerdict !== 0) return byVerdict;
+
+  const byRank = left.rank - right.rank;
+  if (byRank !== 0) return byRank;
+
+  return burden(left.result.obligations) - burden(right.result.obligations);
 }
 
 /**
@@ -159,5 +238,5 @@ export function evaluateExpression(
     };
   }
 
-  return withNote(evalNode(ast, ctx));
+  return withNote(evalNode(ast, ctx).result);
 }

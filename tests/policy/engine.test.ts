@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateExpression } from '../../src/policy/engine';
-import { verdictMatrix } from '../../src/policy/matrix';
+import { ALL_DISTRIBUTION_MODELS, verdictMatrix } from '../../src/policy/matrix';
 import type { PolicyContext } from '../../src/types';
 
 const ctx = (over: Partial<PolicyContext> = {}): PolicyContext => ({
@@ -111,5 +111,53 @@ describe('版を欠く総称は、補ったことを言う', () => {
     for (const row of rows) {
       expect(row.rationale).not.toContain('does not name a specific version');
     }
+  });
+});
+
+describe('OR の選択は宣言順に左右されない', () => {
+  /**
+   * 判定が同じとき、以前は**宣言順で左のものが残っていた**。
+   * `Apache-2.0 OR MIT` は上位 300 クレート中 23 件あり（`MIT OR Apache-2.0`
+   * と同じ意味）、そのすべてで MIT を選べば要らない `notice-file` と
+   * `patent-grant` が「least restrictive option」として表示されていた。
+   */
+  it('書き方の違いで結果が変わらない（serde と fnv の実データ）', () => {
+    for (const model of ALL_DISTRIBUTION_MODELS) {
+      const a = evaluateExpression('MIT OR Apache-2.0', ctx({ distributionModel: model }));
+      const b = evaluateExpression('Apache-2.0 OR MIT', ctx({ distributionModel: model }));
+      expect(b.obligations).toEqual(a.obligations);
+      expect(b.verdict).toBe(a.verdict);
+    }
+  });
+
+  it('緩い方を採る＝MIT を選ぶ。Apache-2.0 の追加義務は出さない', () => {
+    const r = evaluateExpression('Apache-2.0 OR MIT', ctx());
+    expect(r.obligations).toEqual(['attribution']);
+  });
+
+  it('3 つ以上でも順に左右されない（Apache-2.0 OR ISC OR MIT の実データ）', () => {
+    const r = evaluateExpression('Apache-2.0 OR ISC OR MIT', ctx());
+    expect(r.obligations).not.toContain('notice-file');
+  });
+
+  /**
+   * **表は 1 つの選択で読めなければならない。**
+   *
+   * 以前は行ごとに別のライセンスを選んでいた。`GPL-3.0-only OR MIT` は
+   * saas と internal-only では GPL（その用途では義務が発火しないので
+   * 義務ゼロ）、distributed-binary では MIT を選んでいた。行ごとには
+   * 正しいが、**どの単一の選択でも再現できない表**になる。読み手は
+   * 1 つを選んで全用途で使うので、選択は表全体で 1 つに固定する。
+   */
+  it('配布形態が変わっても同じライセンスを選ぶ', () => {
+    const rows = verdictMatrix('GPL-3.0-only OR MIT');
+    for (const r of rows) expect(r.obligations).toEqual(['attribution']);
+  });
+
+  it('緩い側が blocked なら、判定を優先して厳しい側を採る', () => {
+    // 判定は今も第一基準。緩さの比較は判定が並んだときだけ働く
+    const r = evaluateExpression('AGPL-3.0-only OR MIT', ctx());
+    expect(r.verdict).toBe('allowed');
+    expect(r.obligations).toEqual(['attribution']);
   });
 });
