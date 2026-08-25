@@ -92,6 +92,24 @@ describe('コピーレフトの分類子を取り違えない', () => {
     });
   }
 
+  it('版を書かない分類子に、勝手な版を補わない', async () => {
+    // GPLv2 と GPLv3 は互いに非互換。分からない版を具体的に名乗るのは
+    // 「厳しい方に倒す」ではなく別のライセンスだと主張すること。
+    // mysql-connector-python は実際 GPLv2 + FOSS 例外なのに
+    // GPL-3.0-only と答えていた
+    const f = mockFetch({
+      info: {
+        license: 'GNU GPLv2 (with FOSS License Exception)',
+        license_expression: null,
+        classifiers: ['License :: OSI Approved :: GNU General Public License (GPL)'],
+      },
+    });
+    const spdx = (await fetchPypiLicense('mysql-connector-python', null, f)).spdx;
+    expect(spdx).not.toMatch(/3\.0/);
+    // 族までは確かなので、族は答える
+    expect(categorize(spdx!)).toBe('strong-copyleft');
+  });
+
   it('AGPL を GPL と取り違えない', async () => {
     // 配布しない SaaS でも第13条が効くのは AGPL だけ。
     // ここを GPL に倒すと、条件が効いているのに効いていないと答える

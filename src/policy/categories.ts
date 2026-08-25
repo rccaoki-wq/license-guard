@@ -72,6 +72,17 @@ export function categorize(licenseId: string): LicenseCategory {
   if (id.startsWith('agpl-')) return 'network-copyleft';
   if (id.startsWith('lgpl-')) return 'library-copyleft';
   if (id.startsWith('gpl-')) return 'strong-copyleft';
+
+  // 版を伴わない総称。SPDX 識別子ではないが、上流のメタデータには実在する
+  // （PyPI の "GNU General Public License (GPL)" 分類子など）。
+  //
+  // **版を勝手に補わないこと。** v2 と v3 は互いに非互換なので、
+  // 分からない版を具体的に名乗るのは「厳しい方に倒す」ではなく別物の主張。
+  // 実際 mysql-connector-python は GPLv2 + FOSS 例外なのに GPL-3.0-only と
+  // 答えていた。族だけは確かなので、族だけを答える
+  if (id === 'agpl') return 'network-copyleft';
+  if (id === 'lgpl') return 'library-copyleft';
+  if (id === 'gpl') return 'strong-copyleft';
   // Creative Commons は条件の組み合わせで別物になる。接尾辞を見ずに
   // 「CC-BY 系だから permissive」と倒すと、コピーレフトと改変禁止が
   // まとめて許可になる。厳しい条件から順に判定すること

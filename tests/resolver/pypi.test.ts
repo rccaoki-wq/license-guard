@@ -123,10 +123,13 @@ describe('曖昧な classifier の扱い', () => {
     expect((await fetchPypiLicense('p', null, f)).spdx).toBe('MIT');
   });
 
-  it('版を欠く GPL 分類子を最も制約の強い解釈に倒す', async () => {
+  it('版を欠く GPL 分類子に版を補わない', async () => {
+    // 「分からないなら厳しい方へ」で GPL-3.0-only にしていたが、
+    // GPLv2 と GPLv3 は互いに非互換で、これは厳しめの答えではなく
+    // 別のライセンスだという主張になる。族だけを答える
     const f = mockFetch({
       info: { classifiers: ['License :: OSI Approved :: GNU General Public License (GPL)'] },
     });
-    expect((await fetchPypiLicense('p', null, f)).spdx).toBe('GPL-3.0-only');
+    expect((await fetchPypiLicense('p', null, f)).spdx).toBe('GPL');
   });
 });

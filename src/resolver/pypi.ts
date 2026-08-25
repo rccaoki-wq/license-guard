@@ -79,9 +79,24 @@ export const CLASSIFIER_TO_SPDX: Record<string, string> = {
   'CeCILL-B Free Software License Agreement (CECILL-B)': 'CECILL-B',
   'CeCILL-C Free Software License Agreement (CECILL-C)': 'CECILL-C',
   'CEA CNRS Inria Logiciel Libre License, version 2.1 (CeCILL-2.1)': 'CECILL-2.1',
-  // 版を欠く総称。最も制約の強い解釈に倒す（permissive と誤るより安全）
-  'GNU General Public License (GPL)': 'GPL-3.0-only',
-  'GNU Library or Lesser General Public License (LGPL)': 'LGPL-3.0-only',
+};
+
+/**
+ * 版を書かない分類子 → 族の名前。**SPDX 識別子ではない。**
+ *
+ * かつてこれらを `GPL-3.0-only` / `LGPL-3.0-only` に寄せていた。
+ * 「版が分からないなら厳しい方へ」という理屈だったが、これは誤り。
+ * GPLv2 と GPLv3 は互いに非互換で、v3 と名乗ることは「厳しめ」ではなく
+ * **別のライセンスだと主張すること**。実際 mysql-connector-python は
+ * GPLv2 + FOSS 例外なのに GPL-3.0-only と答えていた。
+ *
+ * 族が分かれば義務も判定も決まる（GPL の v2/v3 はどちらも strong-copyleft）。
+ * 決まらないのは版だけなので、版だけを言わない。engine は式として
+ * 読めない単一の識別子を categorize に回すので、この値で判定は通る。
+ */
+const VERSIONLESS_CLASSIFIERS: Record<string, string> = {
+  'GNU General Public License (GPL)': 'GPL',
+  'GNU Library or Lesser General Public License (LGPL)': 'LGPL',
 };
 
 /**
@@ -89,11 +104,7 @@ export const CLASSIFIER_TO_SPDX: Record<string, string> = {
  * "BSD License" は 2-Clause と 3-Clause のどちらかを区別しない。
  * この場合は自由記述の info.license の方が具体的なことがあるので先に見る。
  */
-const AMBIGUOUS_CLASSIFIERS = new Set([
-  'BSD License',
-  'GNU General Public License (GPL)',
-  'GNU Library or Lesser General Public License (LGPL)',
-]);
+const AMBIGUOUS_CLASSIFIERS = new Set(['BSD License', ...Object.keys(VERSIONLESS_CLASSIFIERS)]);
 
 /** SPDX 識別子として妥当な形をしているか（自由記述の除外用） */
 const SPDX_SHAPE = /^[A-Za-z0-9.+-]+$/;
@@ -130,9 +141,9 @@ function extract(doc: PypiDoc): string | null {
   const ambiguous: string[] = [];
   for (const c of doc.info?.classifiers ?? []) {
     const tail = c.replace(/^License :: (OSI Approved :: )?/, '');
-    const spdx = CLASSIFIER_TO_SPDX[tail];
-    if (!spdx) continue;
-    (AMBIGUOUS_CLASSIFIERS.has(tail) ? ambiguous : specific).push(spdx);
+    const id = CLASSIFIER_TO_SPDX[tail] ?? VERSIONLESS_CLASSIFIERS[tail];
+    if (!id) continue;
+    (AMBIGUOUS_CLASSIFIERS.has(tail) ? ambiguous : specific).push(id);
   }
 
   const chosen = join(specific);
