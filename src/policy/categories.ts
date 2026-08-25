@@ -44,6 +44,33 @@ const EXACT: Record<string, LicenseCategory> = {
   'mit-modern-variant': 'permissive',
   'openssl': 'permissive',
   'php-3.01': 'permissive',
+  // Python 本体系。**上位 300 PyPI で最多ダウンロードの typing-extensions が
+  // PSF-2.0 を宣言している。** ここが空だと、Python エコシステムの
+  // 一番上にあるパッケージが「要確認」で返る
+  'psf-2.0': 'permissive',
+  'cnri-python': 'permissive',
+  'cnri-python-gpl-compatible': 'permissive',
+  'mit-cmu': 'permissive',
+  // Community Data License Agreement の permissive 版。Rust の TLS スタック
+  // （webpki-roots / webpki-root-certs）が実際に使っている
+  'cdla-permissive-1.0': 'permissive',
+  'cdla-permissive-2.0': 'permissive',
+  hpnd: 'permissive',
+  'upl-1.0': 'permissive',
+  'w3c': 'permissive',
+  miros: 'permissive',
+  'mulanpsl-2.0': 'permissive',
+  // Apache-2.0 に教育機関向けの特許条項を足したもの
+  'ecl-2.0': 'permissive',
+  'zpl-2.1': 'permissive',
+  'vsl-1.0': 'permissive',
+  // 表示を UI に出すことを求める BSD 系。義務は attribution で足りる
+  aal: 'permissive',
+  // **CECILL は B / C / 2.1 で強さが違う。** 名前が 1 文字しか違わないので、
+  // ひとまとめにすると BSD 相当と GPL 相当が同じ扱いになる
+  'cecill-b': 'permissive',
+  'cecill-c': 'library-copyleft',
+  'cecill-2.1': 'strong-copyleft',
   'ms-pl': 'file-copyleft',
   'mpl-2.0': 'file-copyleft',
   'mpl-1.1': 'file-copyleft',
@@ -51,6 +78,38 @@ const EXACT: Record<string, LicenseCategory> = {
   'epl-2.0': 'file-copyleft',
   'cddl-1.0': 'file-copyleft',
   'cddl-1.1': 'file-copyleft',
+  // MPL の系譜（MPL-1.0 → NPL/SPL/RSCPL）と、EPL の祖先（CPL/IPL）。
+  // いずれも改変したファイルのソース提供までを求め、リンクした側には及ばない
+  'mpl-1.0': 'file-copyleft',
+  'npl-1.1': 'file-copyleft',
+  'spl-1.0': 'file-copyleft',
+  'rscpl': 'file-copyleft',
+  'cpl-1.0': 'file-copyleft',
+  'ipl-1.0': 'file-copyleft',
+  'motosoto': 'file-copyleft',
+  'ogtsl': 'file-copyleft',
+  // **SIL Open Font License はフォントに閉じたコピーレフト。** 改変した
+  // フォントは OFL のままだが、そのフォントを使うプログラムには及ばない。
+  // permissive に置くと、フォント自体を再配布するときの条件が消える
+  'ofl-1.1': 'file-copyleft',
+  'ofl-1.0': 'file-copyleft',
+  // **Sleepycat（Berkeley DB）は permissive ではない。** 分類子表では
+  // permissive な名前に囲まれて並んでいるが、これを使うアプリケーションは
+  // **全体のソース公開を求められる。** 並びで倒すと最も強い部類を素通しする
+  sleepycat: 'strong-copyleft',
+  // NetHack GPL。前文が違うだけで条件は GPL と同じ
+  ngpl: 'strong-copyleft',
+  // QPL 6条は、リンクする側のプログラムを自由に再配布可能にすることを求める
+  'qpl-1.0': 'strong-copyleft',
+  // **ネットワーク越しの利用を配布とみなすもの。** AGPL 13条と同じ引き金で、
+  // SaaS で使った時点で義務が発火する。
+  // OSL-3.0 §5 "External Deployment"、EUPL 13条/14条（Communication of the Work）。
+  // review に落とすのは「安全側」ではなく、AGPL を見逃すのと同じ過小警告になる
+  'osl-3.0': 'network-copyleft',
+  'osl-2.1': 'network-copyleft',
+  'eupl-1.0': 'network-copyleft',
+  'eupl-1.1': 'network-copyleft',
+  'eupl-1.2': 'network-copyleft',
   'sspl-1.0': 'source-available',
   'busl-1.1': 'source-available',
   'bsl-1.1': 'source-available',
