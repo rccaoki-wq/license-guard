@@ -63,6 +63,8 @@ curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guar
 | [appcypher/awesome-mcp-servers](https://github.com/appcypher/awesome-mcp-servers) | 5.8千スター | **アーカイブ済**。PR も issue も受け付けない |
 | [wong2/awesome-mcp-servers](https://github.com/wong2/awesome-mcp-servers) | 4.3千スター | PR不可。[mcpservers.org/submit](https://mcpservers.org/submit) のフォーム（**ブラウザとメールアドレスが要る**） |
 | [smithery.ai](https://smithery.ai) | 7千件超 | **登録済** `rcc-aoki/license-guard`。掲載本文・3ツール・20リソース・2プロンプトすべて反映済。quality **100/100**（2026-08-25 実測） |
+| [mcpmarket.com](https://mcpmarket.com/server/licenseguard) | — | **申請していないのに掲載されていた**（2026-08-25 発見）。公式レジストリからの自動取り込みと思われる。**発リンクは GitHub 宛の2本のみで、どちらのホストにもリンクが無い** |
+| [getlulu.dev](https://getlulu.dev/mcps/licenseguard-f1d7d1) | — | 同上、自動取り込み。**発リンクにこちらのホストは1本も無い** |
 
 ## ホスト名が 2 つある理由（触る前に読むこと）
 
@@ -84,10 +86,19 @@ curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guar
 |---|---|---|---|
 | smithery.ai | `licenseguard.tenchorooms.com` | `noopener noreferrer` | **follow。既に正規ホストを指している** |
 | glama.ai | `license-guard.rcc-aoki.workers.dev` | `ugc nofollow` | 無し。向け直しても無し |
+| mcpservers.org | GitHub リポジトリのみ | 本文中は全て nofollow | 無し |
+| mcpmarket.com | GitHub リポジトリのみ | `noopener noreferrer` | **サイトへの被リンクにならない**（リポジトリには効く） |
+| getlulu.dev | （該当リンクなし） | — | 無し |
 
 つまり**効く 1 本は既に正しく向いており、向いていない方は nofollow なので
 向け直す価値が無い**。掲載ホストの変更は、導入済み利用者の設定を壊す risk だけを
 払って得るものが無い。測り直すなら `rel` から測ること。
+
+**掲載件数を被リンク数と読み替えないこと。** 2026-08-25 時点で掲載は 9 箇所あるが、
+`licenseguard.tenchorooms.com` を指す follow リンクは **smithery.ai の 1 本だけ**。
+残りは nofollow か、GitHub リポジトリにしかリンクしていないか、リンクが無い。
+カタログを増やす作業は MCP クライアントからの発見には効くが、**検索順位の
+ボトルネック（被リンク1本）は 1 件も動かしていない**。
 
 **どちらのホストも落とさない。** 特に `wrangler.toml` の `workers_dev = true` は
 消さないこと（理由はそのファイルに書いてある）。`npm run e2e:operational` が
@@ -140,6 +151,30 @@ Smithery の掲載本文は**解決済**。CLI にメタデータを渡す口が
 Web UI 側で入れた内容が反映され、description / repository / tools / resources /
 prompts すべて描画されている。quality も 100/100 になり、残る verified の欠けは
 「homepage ホストの TXT」と「有料 developer plan」の2つだけになった。
+
+## 名前は使えない handle である（2026-08-25 に SERP を実測）
+
+GSC のページ／リンクレポートが「データを処理しています」から動かないので、
+Google の検索結果そのものを測った（`C:\tmp\lg-chrome\rank-check.mjs`）。
+
+- `site:licenseguard.tenchorooms.com` → **約 26 件**（前回 8 件）。**インデックスは
+  自力で進んでいる**。設定にもサイトマップにも問題は無い
+- `site:license-guard.rcc-aoki.workers.dev` → **0 件**（`noindex` 設計どおり）
+- 意図クエリ（AGPL×SaaS / GPL の dev 依存 / 配布モデル別の義務 / distribution model
+  を含む license checker）は **すべて圏外**。母集団は 4.6千〜5.95億件
+
+**ブランド名は既に取られていて、名前で戦う余地が無い。**
+
+| 競合 | 内容 |
+|---|---|
+| `licenseguard.io` | **同名・同カテゴリ**。「free software license compliance scanner」で対応マニフェスト種別まで同じ。運営者名の記載が無く、SEO 用のランディングページに見えるが、**こちらより上位に出る** |
+| Dreamstime の "LicenseGuard" | 無関係の別製品。同名 |
+| 日本語ロケール | ブランド語で引くと**国内のライセンス管理製品**が埋める。こちらは出ない |
+
+だから**ブランド名の露出を増やす施策（カタログ掲載を増やす等）は検索経由の
+到達に効かない**。効くのは「問い」で見つかること（`/compare/*`・`/license/*`）と、
+その前提になる被リンクだけ。ここを取り違えると、掲載件数が増えて数字が動いた
+気になるのに到達は 0 のまま、という状態を延々と続けることになる。
 
 ## パッケージ公開（GHCR）
 
