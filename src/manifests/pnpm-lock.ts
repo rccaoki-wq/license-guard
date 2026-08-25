@@ -18,7 +18,7 @@ import type { Dependency } from '../types';
  */
 export function parsePnpmLock(content: string): Dependency[] {
   const lines = content.split(/\r?\n/);
-  const found = new Map<string, string>();
+  const found = new Map<string, { version: string | null; origin: Dependency['origin'] }>();
 
   let inPackages = false;
   let indent = -1;
@@ -50,19 +50,27 @@ export function parsePnpmLock(content: string): Dependency[] {
     const key = line.slice(0, -1).replace(/^["']|["']$/g, '');
     const parsed = splitNameVersion(key);
     if (parsed && isSafePackageName(parsed.name) && !found.has(parsed.name)) {
-      found.set(parsed.name, parsed.version);
+      found.set(parsed.name, { version: parsed.version, origin: parsed.origin });
     }
   }
 
-  return [...found].map(([name, version]) => ({
+  return [...found].map(([name, v]) => ({
     ecosystem: 'npm' as const,
     name,
-    version,
+    version: v.version,
     scope: 'runtime' as const,
+    ...(v.origin ? { origin: v.origin } : {}),
   }));
 }
 
-function splitNameVersion(key: string): { name: string; version: string } | null {
+interface KeyParts {
+  name: string;
+  /** バージョンとして使えないもの（tarball URL 等）は null にする */
+  version: string | null;
+  origin: Dependency['origin'];
+}
+
+function splitNameVersion(key: string): KeyParts | null {
   // peer 情報を落とす: react-dom@18.2.0(react@18.2.0) -> react-dom@18.2.0
   const base = key.split('(')[0]!.trim();
 
@@ -72,15 +80,26 @@ function splitNameVersion(key: string): { name: string; version: string } | null
     if (idx <= 0) return null;
     const name = base.slice(1, idx);
     const version = base.slice(idx + 1);
-    return name && version ? { name, version } : null;
+    return name && version ? { name, version, origin: 'registry' } : null;
   }
 
-  // 新形式: name@version または @scope/name@version
-  const at = base.lastIndexOf('@');
+  // 新形式: name@version または @scope/name@version。
+  // 区切りは**最初の** @（スコープの @ を除く）。git 依存の右辺は
+  // tarball URL で、最後の @ で切ると名前かバージョンのどちらかが壊れる
+  const from = base.startsWith('@') ? 1 : 0;
+  const at = base.indexOf('@', from);
   if (at <= 0) return null;
   const name = base.slice(0, at);
-  const version = base.slice(at + 1);
-  return name && version ? { name, version } : null;
+  const rest = base.slice(at + 1);
+  if (!name || !rest) return null;
+
+  // git 依存は右辺が URL。**バージョンではないので version に入れない。**
+  // 入れたまま照会すると版が一致せず最新版に落ち、同名の公開パッケージの
+  // ライセンスを自分のものとして貼ることになる
+  if (rest.includes('://')) return { name, version: null, origin: 'git' };
+  if (/^(file|link|portal):/.test(rest)) return { name, version: null, origin: 'workspace' };
+
+  return { name, version: rest, origin: 'registry' };
 }
 
 export function isPnpmLock(content: string): boolean {

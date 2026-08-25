@@ -10,6 +10,8 @@ interface LockEntry {
   devOptional?: boolean;
   /** ワークスペース内へのシンボリックリンク。公開パッケージではない */
   link?: boolean;
+  /** 取得元。`git+…` なら公開リリースではない */
+  resolved?: string;
 }
 
 interface LockFile {
@@ -41,6 +43,19 @@ function declaredLicense(entry: LockEntry): string | undefined {
     if (types.length > 1) return `(${types.join(' OR ')})`;
   }
   return undefined;
+}
+
+/**
+ * `resolved` から、npm を引く意味があるかを決める。
+ *
+ * **git だけを見る。ホスト名では判定しない。** Artifactory や Nexus の
+ * 透過プロキシを使う会社では `resolved` が npmjs 以外を指すが、中身は
+ * npmjs の同じパッケージである。ホストで私設レジストリと決めつけると、
+ * そういう会社のスキャンが丸ごと引けなくなる。本当に非公開なものと
+ * プロキシ越しの公開パッケージを、ここで区別する手段は無い。
+ */
+function originOf(entry: LockEntry): Dependency['origin'] {
+  return typeof entry.resolved === 'string' && entry.resolved.startsWith('git+') ? 'git' : undefined;
 }
 
 function scopeOf(entry: LockEntry): Scope {
@@ -97,6 +112,7 @@ export function parsePackageLock(content: string): Dependency[] {
       version: typeof entry.version === 'string' && entry.version !== '' ? entry.version : null,
       scope: scopeOf(entry),
       declaredLicense: declaredLicense(entry),
+      ...(originOf(entry) ? { origin: originOf(entry) } : {}),
     });
   }
 
