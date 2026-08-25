@@ -3,8 +3,19 @@ import { normalizeLicenseString } from '../policy/normalize';
 import { categorize } from '../policy/categories';
 import type { LicenseLookup } from './index';
 
-/** PyPI trove classifier → SPDX 識別子 */
-const CLASSIFIER_TO_SPDX: Record<string, string> = {
+/**
+ * PyPI trove classifier → SPDX 識別子。
+ *
+ * **見出しは PyPI が実際に出す文字列と一字一句同じにすること。**
+ * 存在しない綴りを鍵にしても型エラーにも例外にもならず、その行は
+ * 永久に発火しない。実際 `GNU Lesser General Public License (LGPL)` と
+ * 書いていたが、PyPI が出すのは
+ * `GNU Library or Lesser General Public License (LGPL)` で、
+ * LGPL を宣言したパッケージが全て「判定不能」に落ちていた。
+ * tests/fixtures/pypi-license-classifiers.txt が公式の一覧で、
+ * テストがそれとの差分を見張っている。
+ */
+export const CLASSIFIER_TO_SPDX: Record<string, string> = {
   'MIT License': 'MIT',
   'MIT No Attribution License (MIT-0)': 'MIT-0',
   'Apache Software License': 'Apache-2.0',
@@ -15,17 +26,62 @@ const CLASSIFIER_TO_SPDX: Record<string, string> = {
   'GNU General Public License v2 or later (GPLv2+)': 'GPL-2.0-or-later',
   'GNU General Public License v3 or later (GPLv3+)': 'GPL-3.0-or-later',
   'GNU Lesser General Public License v2 (LGPLv2)': 'LGPL-2.0-only',
+  'GNU Lesser General Public License v2 or later (LGPLv2+)': 'LGPL-2.0-or-later',
   'GNU Lesser General Public License v3 (LGPLv3)': 'LGPL-3.0-only',
+  'GNU Lesser General Public License v3 or later (LGPLv3+)': 'LGPL-3.0-or-later',
   'GNU Affero General Public License v3': 'AGPL-3.0-only',
-  'GNU Affero General Public License v3 or later (AGPL v3+)': 'AGPL-3.0-or-later',
+  'GNU Affero General Public License v3 or later (AGPLv3+)': 'AGPL-3.0-or-later',
+  'Mozilla Public License 1.0 (MPL)': 'MPL-1.0',
+  'Mozilla Public License 1.1 (MPL 1.1)': 'MPL-1.1',
   'Mozilla Public License 2.0 (MPL 2.0)': 'MPL-2.0',
+  'Common Development and Distribution License 1.0 (CDDL-1.0)': 'CDDL-1.0',
+  'Eclipse Public License 1.0 (EPL-1.0)': 'EPL-1.0',
   'Eclipse Public License 2.0 (EPL-2.0)': 'EPL-2.0',
+  'European Union Public Licence 1.0 (EUPL 1.0)': 'EUPL-1.0',
+  'European Union Public Licence 1.1 (EUPL 1.1)': 'EUPL-1.1',
+  'European Union Public Licence 1.2 (EUPL 1.2)': 'EUPL-1.2',
+  'Open Software License 3.0 (OSL-3.0)': 'OSL-3.0',
+  'Common Public License': 'CPL-1.0',
+  'IBM Public License': 'IPL-1.0',
+  'Sun Public License': 'SPL-1.0',
+  'Netscape Public License (NPL)': 'NPL-1.1',
+  'Nethack General Public License': 'NGPL',
+  'Qt Public License (QPL)': 'QPL-1.0',
+  'Sleepycat License': 'Sleepycat',
+  'Artistic License': 'Artistic-1.0',
   'The Unlicense (Unlicense)': 'Unlicense',
+  'CC0 1.0 Universal (CC0 1.0) Public Domain Dedication': 'CC0-1.0',
   'Python Software Foundation License': 'Python-2.0',
+  'Python License (CNRI Python License)': 'CNRI-Python',
   'zlib/libpng License': 'Zlib',
+  'Zero-Clause BSD (0BSD)': '0BSD',
+  'Boost Software License 1.0 (BSL-1.0)': 'BSL-1.0',
+  'CMU License (MIT-CMU)': 'MIT-CMU',
+  'Historical Permission Notice and Disclaimer (HPND)': 'HPND',
+  'University of Illinois/NCSA Open Source License': 'NCSA',
+  'SIL Open Font License 1.1 (OFL-1.1)': 'OFL-1.1',
+  'PostgreSQL License': 'PostgreSQL',
+  'Universal Permissive License (UPL)': 'UPL-1.0',
+  'W3C License': 'W3C',
+  'Zope Public License': 'ZPL-2.1',
+  'MirOS License (MirOS)': 'MirOS',
+  'Blue Oak Model License (BlueOak-1.0.0)': 'BlueOak-1.0.0',
+  'Mulan Permissive Software License v2 (MulanPSL-2.0)': 'MulanPSL-2.0',
+  'Academic Free License (AFL)': 'AFL-3.0',
+  'Educational Community License, Version 2.0 (ECL-2.0)': 'ECL-2.0',
+  'Attribution Assurance License': 'AAL',
+  'Open Group Test Suite License': 'OGTSL',
+  'Motosoto License': 'Motosoto',
+  'Vovida Software License 1.0': 'VSL-1.0',
+  'Ricoh Source Code Public License': 'RSCPL',
+  'NASA Open Source Agreement v1.3 (NASA-1.3)': 'NASA-1.3',
+  'Aladdin Free Public License (AFPL)': 'Aladdin',
+  'CeCILL-B Free Software License Agreement (CECILL-B)': 'CECILL-B',
+  'CeCILL-C Free Software License Agreement (CECILL-C)': 'CECILL-C',
+  'CEA CNRS Inria Logiciel Libre License, version 2.1 (CeCILL-2.1)': 'CECILL-2.1',
   // 版を欠く総称。最も制約の強い解釈に倒す（permissive と誤るより安全）
   'GNU General Public License (GPL)': 'GPL-3.0-only',
-  'GNU Lesser General Public License (LGPL)': 'LGPL-3.0-only',
+  'GNU Library or Lesser General Public License (LGPL)': 'LGPL-3.0-only',
 };
 
 /**
@@ -36,7 +92,7 @@ const CLASSIFIER_TO_SPDX: Record<string, string> = {
 const AMBIGUOUS_CLASSIFIERS = new Set([
   'BSD License',
   'GNU General Public License (GPL)',
-  'GNU Lesser General Public License (LGPL)',
+  'GNU Library or Lesser General Public License (LGPL)',
 ]);
 
 /** SPDX 識別子として妥当な形をしているか（自由記述の除外用） */
@@ -70,23 +126,40 @@ function extract(doc: PypiDoc): string | null {
 
   // classifiers は構造化されており、通常は自由記述より信頼できる。
   // ただし版を特定できない分類子だけは、具体的な自由記述に譲る。
-  let ambiguousFallback: string | null = null;
+  const specific: string[] = [];
+  const ambiguous: string[] = [];
   for (const c of doc.info?.classifiers ?? []) {
     const tail = c.replace(/^License :: (OSI Approved :: )?/, '');
     const spdx = CLASSIFIER_TO_SPDX[tail];
     if (!spdx) continue;
-
-    if (AMBIGUOUS_CLASSIFIERS.has(tail)) {
-      ambiguousFallback ??= spdx;
-      continue;
-    }
-    return spdx;
+    (AMBIGUOUS_CLASSIFIERS.has(tail) ? ambiguous : specific).push(spdx);
   }
+
+  const chosen = join(specific);
+  if (chosen) return chosen;
 
   const free = fromFreeText(doc);
   if (free) return free;
 
-  return ambiguousFallback;
+  return join(ambiguous);
+}
+
+/**
+ * 複数の分類子を 1 つの式にまとめる。
+ *
+ * **先に書かれたものを答えにしないこと。** PyPI は分類子を著者が書いた順に
+ * 保つだけで、そこに優先度は無い。先勝ちにすると、同じ意味の 2 つの
+ * パッケージが並び順だけで別の答えになり、しかも緩い方が先にあると
+ * コピーレフトの義務が消える。
+ *
+ * 複数宣言はほぼ常に「どちらかを選べる」意味なので OR で繋ぐ。
+ * policy 側が緩い方を選び、利用者には選択肢が両方見える。
+ * 並べ替えるのは、答えを著者の記述順から切り離すため。
+ */
+function join(ids: string[]): string | null {
+  const unique = [...new Set(ids)].sort();
+  if (unique.length === 0) return null;
+  return unique.join(' OR ');
 }
 
 export async function fetchPypiLicense(
@@ -113,4 +186,3 @@ export async function fetchPypiLicense(
   if (spdx === null) return { spdx: null };
   return version === null ? { spdx } : { spdx, fromLatest: true };
 }
-
