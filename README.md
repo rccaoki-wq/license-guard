@@ -121,7 +121,11 @@ Problem licenses usually arrive as a dependency of a dependency, not as somethin
 
 A single scan performs at most 300 registry lookups, which bounds what one request can cost. Cached packages don't consume that budget, so the ceiling only binds on packages nobody has looked up yet — a first scan of a ~1000-crate `Cargo.lock` typically leaves a few dozen entries marked `not-checked`, and scanning again resolves them (measured: servo's 1043 crates reach zero unresolved published crates on the second pass). The result says so explicitly rather than quietly showing a shorter list.
 
-Git dependencies, members of the workspace being scanned, and crates from a private registry are reported as `not-published` instead. No public registry has license data for them, so they are never looked up. That is a different situation from hitting the lookup limit: re-scanning will not resolve them, and the result says so.
+Git dependencies and members of the workspace being scanned are reported as `not-published` instead, across every format that identifies them — `Cargo.lock`'s `source` field, yarn's `workspace:` and `git+` protocols, pnpm's tarball URLs, and `package-lock.json`'s `resolved`. No public registry has license data for them, so they are never looked up. That is a different situation from hitting the lookup limit: re-scanning will not resolve them, and the result says so.
+
+This matters for more than speed. A workspace member named after a package that also exists publicly — `utils`, `core`, or anything else generic — would otherwise be resolved against that unrelated public package and reported as `allowed`, because the workspace version (`0.0.0-use.local`) matches nothing and the lookup falls back to the latest release. Marking the origin is what stops a private package from inheriting a stranger's license.
+
+Private registries are the deliberate exception. A `resolved` URL pointing somewhere other than npmjs is just as likely to be a transparent Artifactory or Nexus proxy serving the real public package, and nothing in the lockfile distinguishes the two — so those are still looked up, and still reported as `unresolved` if they fail.
 
 ## Status
 
