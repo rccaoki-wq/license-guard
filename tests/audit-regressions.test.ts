@@ -52,7 +52,8 @@ describe('監査#3 照会が必要な依存数の上限', () => {
     // 全件が結果に含まれ、未確認分は allowed でなく review になる
     expect(r.summary.total).toBe(MAX_LOOKUPS + 1);
     expect(r.findings.filter((f) => f.resolvedFrom === 'not-checked').length).toBe(1);
-    expect(r.limitations.some((l) => l.includes('were not checked'))).toBe(true);
+    // ちょうど1件なので単数形になる（tests/limitation-wording）
+    expect(r.limitations.some((l) => l.includes('1 dependency was not checked'))).toBe(true);
   });
 
   it('上限ちょうどは通す', () => {

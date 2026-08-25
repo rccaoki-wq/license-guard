@@ -126,6 +126,14 @@ function limitationsFor(ecosystem: Ecosystem, findings: Finding[], transitive: b
         'Results are based on license metadata declared in the manifest. Code copied into your own source files is not detected.',
       ];
 
+  /**
+   * 件数と動詞を揃える。「1 dependencies are」は、書いてある内容まで
+   * 雑に見せる。ここは不完全なスキャンの理由を伝える最後の一文なので、
+   * 信頼を削る書き方をしない
+   */
+  const count = (n: number, singular: string, plural: string) =>
+    n === 1 ? `1 dependency ${singular}` : `${n} dependencies ${plural}`;
+
   if (ecosystem === 'go' || ecosystem === 'cargo') {
     const label = ecosystem === 'go' ? 'Go modules' : 'Rust crates';
     out.push(`${label} were evaluated assuming static linking.`);
@@ -138,16 +146,18 @@ function limitationsFor(ecosystem: Ecosystem, findings: Finding[], transitive: b
     out.unshift(
       // 打ち切りの理由は件数上限と時間切れの両方がありうる。片方だけを
       // 名指しすると、もう片方のときに嘘になる
-      `${notChecked} dependencies were not checked because this scan reached its lookup limit. They are listed as needing review, not as clear. Scanning again will cover more of them, since each scan warms a shared cache.`,
+      `${count(notChecked, 'was', 'were')} not checked because this scan reached its lookup limit. They are listed as needing review, not as clear. Scanning again will cover more of them, since each scan warms a shared cache.`,
     );
   }
 
   // 「もう一度スキャンすれば解決する」が効かない唯一の分類なので、
-  // not-checked と一緒くたにせず、別の文で理由を言う
+  // not-checked と一緒くたにせず、別の文で理由を言う。
+  // **エコシステムの語を入れない。** yarn workspaces のメンバーも
+  // package-lock の git 依存も同じ文を読む
   const notPublished = findings.filter((f) => f.resolvedFrom === 'not-published').length;
   if (notPublished > 0) {
     out.push(
-      `${notPublished} dependencies are not published on a public registry — git dependencies, members of this workspace, or crates from another registry. No registry has license data for them, so they are listed as needing review. Scanning again will not change that; the licenses have to come from the sources themselves.`,
+      `${count(notPublished, 'is', 'are')} not published on a public registry — git dependencies, members of the workspace being scanned, or packages from a private registry. No registry has license data for them, so they are listed as needing review. Scanning again will not change that; the licenses have to come from the sources themselves.`,
     );
   }
 
