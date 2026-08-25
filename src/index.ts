@@ -9,7 +9,8 @@ import { LicenseCache } from './resolver/cache';
 import { LicenseResolver } from './resolver';
 import { findLicense } from './seo/catalog';
 import { renderLicenseResource } from './mcp/resources';
-import { buildRobotsTxt, buildSitemap, type SitemapPackage } from './seo/sitemap';
+import { buildRobotsTxt, buildSitemap } from './seo/sitemap';
+import { listPackageIndex, recordPackagePage } from './seo/package-index';
 import { buildLlmsTxt } from './seo/llms';
 import { handleMcpRequest } from './mcp/handler';
 import { createD1Recorder, isSyntheticRequest } from './mcp/telemetry';
@@ -22,6 +23,7 @@ import { packagePath } from './ui/pkg';
 import { SITE_ORIGIN } from './ui/layout';
 import { FAVICON_SVG } from './ui/favicon';
 import { INDEXNOW_KEY, INDEXNOW_KEY_PATH } from './seo/indexnow';
+import { ECOSYSTEMS } from './types';
 import type { DistributionModel, Ecosystem, Linkage, Scope } from './types';
 
 type Env = {
@@ -91,7 +93,6 @@ const DISTRIBUTION_MODELS: readonly DistributionModel[] = [
   'library-published',
 ];
 
-const ECOSYSTEMS: readonly Ecosystem[] = ['npm', 'pypi', 'go', 'cargo'];
 
 /**
  * エコシステムごとのパッケージ名の形。
@@ -354,43 +355,16 @@ app.get('/license/:id', (c) => {
   return c.html(renderLicensePage(entry), 200, { 'cache-control': SEO_CACHE });
 });
 
-/**
- * 解決実績のあるパッケージ。sitemap と `/packages` の**両方がこれを使う**。
- *
- * 別々に問い合わせると、提出しているのに一覧から辿れないページや、
- * 一覧にあるのに提出していないページが静かにできる。取得元を 1 本にする。
- * 絞り込み（結論が配布モデルで変わるか）は表示側の述語に任せる。
- */
-async function listResolvedPackages(db: D1Database): Promise<SitemapPackage[]> {
-  try {
-    const rows = await db
-      .prepare(
-        `SELECT DISTINCT ecosystem, package, spdx FROM license_cache
-         WHERE spdx IS NOT NULL ORDER BY package LIMIT 45000`,
-      )
-      .all<{ ecosystem: string; package: string; spdx: string }>();
-
-    return (rows.results ?? [])
-      .filter((r): r is { ecosystem: Ecosystem; package: string; spdx: string } =>
-        ECOSYSTEMS.includes(r.ecosystem as Ecosystem),
-      )
-      .map((r) => ({ ecosystem: r.ecosystem, name: r.package, spdx: r.spdx }));
-  } catch {
-    // DB 障害時も静的ページだけで応答を返す
-    return [];
-  }
-}
-
 // `/pkg/*` の親。sitemap に載せるだけでは巡回されなかったので、
 // 辿れる場所を作る（詳細は ui/packages.ts）。
 app.get('/packages', async (c) =>
-  c.html(renderPackageIndex(await listResolvedPackages(c.env.DB)), 200, {
+  c.html(renderPackageIndex(await listPackageIndex(c.env.DB)), 200, {
     'cache-control': SEO_CACHE,
   }),
 );
 
 app.get('/sitemap.xml', async (c) => {
-  const packages = await listResolvedPackages(c.env.DB);
+  const packages = await listPackageIndex(c.env.DB);
 
   return c.text(buildSitemap(packages), 200, {
     'content-type': 'application/xml; charset=utf-8',
@@ -417,6 +391,14 @@ async function packageRoute(
       'cache-control': 'public, max-age=300',
     });
   }
+
+  // 索引に載せる。**license_cache には入らない**（版が null の依存は
+  // 鍵が作れないので put が何もしない）ため、ここで載せないとこのページは
+  // 一覧にも sitemap にも永久に出てこない。応答は待たせない
+  const record = recordPackagePage(c.env.DB, ecosystem, name, spdx);
+  const waitUntil = safeWaitUntil(c);
+  if (waitUntil) waitUntil(record);
+  else await record;
 
   return c.html(renderPackagePage({ ecosystem, name, spdx }), 200, {
     'cache-control': SEO_CACHE,

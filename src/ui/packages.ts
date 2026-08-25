@@ -88,7 +88,7 @@ ${
 }
 
 <h2>How a package gets on this list</h2>
-<p>Entries come from lockfiles that have been scanned here. A package is listed only when its license produces different verdicts across the five shipping models, which rules out every permissive license by construction. The per-package pages are generated from the same rules the scanner uses, so a page never disagrees with a scan result.</p>
+<p>Entries come from lockfiles that have been scanned here and from packages that have been looked up directly. A package is listed only when its license produces different verdicts across the five shipping models, which rules out every permissive license by construction. The per-package pages are generated from the same rules the scanner uses, so a page never disagrees with a scan result.</p>
 
 ${scanCta('Your lockfile probably contains one of these. Find out which.')}
 `;
