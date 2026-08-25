@@ -49,7 +49,7 @@ export function packagePath(ecosystem: Ecosystem, name: string): string {
 
 /** 「5 of the 5」は読みにくい。全部なら全部と言う */
 function countOf5(n: number): string {
-  return n === 5 ? 'all 5' : `${n} of the 5`;
+  return n === 5 ? 'all 5 shipping models below' : `${n} of the 5 shipping models below`;
 }
 
 export function renderPackagePage(input: PackagePageInput): string {
@@ -86,11 +86,11 @@ export function renderPackagePage(input: PackagePageInput): string {
     blocked.length > 0
       ? `${name} is licensed under ${spdx}. That triggers obligations in ${blocked.length} of the 5 common shipping models, so whether it is safe for you depends on how you ship.`
       : discloses && review.length > 0
-        ? `${name} is licensed under ${spdx}. It carries a source-disclosure obligation, and ${countOf5(review.length)} of the shipping models below need a reading of the license itself.`
+        ? `${name} is licensed under ${spdx}. It carries a source-disclosure obligation, and ${countOf5(review.length)} need a reading of the license itself.`
         : discloses
           ? `${name} is licensed under ${spdx}. Nothing below is blocked, but it carries a source-disclosure obligation — what triggers it differs by how you ship, so read the table.`
           : review.length > 0
-            ? `${name} is licensed under ${spdx}. It carries no source-disclosure obligation, but its terms restrict how the software may be used, so ${countOf5(review.length)} of the shipping models below need a reading of the license itself.`
+            ? `${name} is licensed under ${spdx}. It carries no source-disclosure obligation, but its terms restrict how the software may be used, so ${countOf5(review.length)} need a reading of the license itself.`
             : // 帰属表示の有無は言い切らず、評価が返した義務から拾う。
               // パブリックドメイン相当（Unlicense, 0BSD など）には残らない
               `${name} is licensed under ${spdx}, which imposes no source-disclosure obligation in any of the shipping models below.${
@@ -145,7 +145,7 @@ ${faqSection(faqs)}
 ${scanCta(`This page covers one package. Your ${MANIFEST_NAME[ecosystem]} has many more.`)}
 
 <h2>How was this determined?</h2>
-<p>The license was read from ${ecosystem === 'go' ? 'deps.dev, with ClearlyDefined as a fallback &mdash; Go has no central license metadata, so both curate it separately' : ecosystem === 'cargo' ? 'crates.io' : `the ${eco} registry`}, then evaluated against each shipping model. ${ecosystem === 'go' || ecosystem === 'cargo' ? 'Dependencies in this ecosystem are linked statically, which is assumed here.' : ''} Only the declared license is considered; code copied into a project's own source files is not detected by this method.</p>
+<p>The license was read from ${ecosystem === 'go' ? "the repository's own LICENSE file, falling back to deps.dev and then ClearlyDefined &mdash; Go has no central license metadata, so a project's LICENSE at its default branch is the most direct answer to what it is licensed under today" : ecosystem === 'cargo' ? 'crates.io' : `the ${eco} registry`}, then evaluated against each shipping model. ${ecosystem === 'go' || ecosystem === 'cargo' ? 'Dependencies in this ecosystem are linked statically, which is assumed here.' : ''} Only the declared license is considered; code copied into a project's own source files is not detected by this method.</p>
 `;
 
   return renderLayout({
