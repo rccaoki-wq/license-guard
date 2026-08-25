@@ -119,7 +119,9 @@ Problem licenses usually arrive as a dependency of a dependency, not as somethin
 
 **An incomplete scan is never reported as clean.** Dependencies that could not be resolved appear as `not-checked` or `review` and are counted in the summary. They never become `allowed`.
 
-A single scan performs at most 200 registry lookups, which bounds what one request can cost. Cached packages don't consume that budget, so the ceiling only binds on packages nobody has looked up yet — a first scan of a ~900-crate `Cargo.lock` typically leaves a few hundred entries marked `not-checked`, and scanning again resolves them. The result says so explicitly rather than quietly showing a shorter list.
+A single scan performs at most 300 registry lookups, which bounds what one request can cost. Cached packages don't consume that budget, so the ceiling only binds on packages nobody has looked up yet — a first scan of a ~1000-crate `Cargo.lock` typically leaves a few dozen entries marked `not-checked`, and scanning again resolves them (measured: servo's 1043 crates reach zero unresolved published crates on the second pass). The result says so explicitly rather than quietly showing a shorter list.
+
+Git dependencies, members of the workspace being scanned, and crates from a private registry are reported as `not-published` instead. No public registry has license data for them, so they are never looked up. That is a different situation from hitting the lookup limit: re-scanning will not resolve them, and the result says so.
 
 ## Status
 
