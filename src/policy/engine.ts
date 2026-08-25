@@ -1,5 +1,6 @@
 import parse from 'spdx-expression-parse';
 import { evaluateLicense } from './rules';
+import { categorize } from './categories';
 import { normalizeLicenseString } from './normalize';
 import type { Obligation, PolicyContext, PolicyResult, Verdict } from '../types';
 
@@ -10,17 +11,54 @@ const SEVERITY: Record<Verdict, number> = {
 };
 
 /**
- * コピーレフト義務を緩和することが明示されている例外。
- * これらが付与されたライセンスは permissive 相当として扱う。
+ * リンクを通じたコピーレフトの伝播を、明示的に解除する例外。
+ *
+ * **入れてよいのは「リンクした側の成果物を同じライセンスにしなくてよい」と
+ * 述べている例外だけ。** autoconf や bison の例外は、そのツールが生成した
+ * 出力を自分の条件で配ってよいという話であり、依存として取り込むこととは
+ * 関係が無い。ここに入れると、GPL のまま扱うべきものが allowed で返る。
  */
-const RELAXING_EXCEPTIONS = new Set<string>([
+const LINKING_EXCEPTIONS = new Set<string>([
   'classpath-exception-2.0',
   'gcc-exception-3.1',
   'gcc-exception-2.0',
   'llvm-exception',
-  'autoconf-exception-3.0',
-  'bison-exception-2.2',
 ]);
+
+/**
+ * リンク例外を適用する。
+ *
+ * 例外が外すのは「リンクした側も同じライセンスにせよ」という部分に限られる。
+ * 部品そのものを配る以上、その部品のソースを渡す義務は残るので、
+ * `source-disclosure` は落とさない。結果として LGPL と同じ形になる。
+ */
+function applyLinkingException(
+  licenseId: string,
+  exception: string,
+  base: PolicyResult,
+): PolicyResult {
+  // 伝播義務が無ければ、例外に外すものが無い。dev 依存などがここに入る。
+  // 緩和処理が義務を作り出さないよう、そのまま返す
+  if (!base.obligations.includes('same-license')) return base;
+
+  // AGPL 13条はネットワーク越しに使わせた時点で発火する。
+  // リンクは別の引き金なので、リンクの例外では外れない
+  if (categorize(licenseId) === 'network-copyleft') {
+    return {
+      ...base,
+      rationale: `${base.rationale} The ${exception} exception addresses linking. The network-use clause is triggered by making the software available to remote users, which is a separate condition, so it still applies.`,
+    };
+  }
+
+  const obligations = base.obligations.filter((o) => o !== 'same-license');
+  if (!obligations.includes('attribution')) obligations.push('attribution');
+
+  return {
+    verdict: 'allowed',
+    obligations,
+    rationale: `${licenseId} carries the ${exception} exception, which lifts the requirement that a work linking to it be licensed under ${licenseId}. The obligation to provide source for this component itself is unaffected.`,
+  };
+}
 
 type Node =
   | { license: string; plus?: boolean; exception?: string }
@@ -32,14 +70,11 @@ function mergeObligations(a: Obligation[], b: Obligation[]): Obligation[] {
 
 function evalNode(node: Node, ctx: PolicyContext): PolicyResult {
   if ('license' in node) {
-    if (node.exception && RELAXING_EXCEPTIONS.has(node.exception.toLowerCase())) {
-      return {
-        verdict: 'allowed',
-        obligations: ['attribution'],
-        rationale: `${node.license} carries the ${node.exception} exception, which lifts the copyleft obligation that linking would otherwise trigger.`,
-      };
+    const base = evaluateLicense(node.license, ctx);
+    if (node.exception && LINKING_EXCEPTIONS.has(node.exception.toLowerCase())) {
+      return applyLinkingException(node.license, node.exception, base);
     }
-    return evaluateLicense(node.license, ctx);
+    return base;
   }
 
   const left = evalNode(node.left, ctx);
