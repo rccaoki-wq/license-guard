@@ -89,7 +89,27 @@ describe('app', () => {
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('No dependencies were found');
+    expect(body.error).toContain('does not look like');
+  });
+
+  it('POST /api/scan は対応外の形式を依存として読まず 400 を返す', async () => {
+    // Gemfile.lock を requirements.txt として読んでいた時期があり、
+    // `GEM` `PLATFORMS` `DEPENDENCIES` を「パッケージ」としたレポートを
+    // 200 で返していた。何も検査できていないなら 200 を返さないこと
+    const { env } = fakeEnv();
+    const res = await app.request(
+      '/api/scan',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          content: 'GEM\n  remote: https://rubygems.org/\n  specs:\n    rails (7.1.3)\n',
+          distributionModel: 'saas',
+        }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
   });
 
   it('POST /api/scan は 4MB を超える入力を 413 で拒否する', async () => {

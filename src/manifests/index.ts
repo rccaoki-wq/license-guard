@@ -5,7 +5,7 @@ import { isPnpmLock, parsePnpmLock } from './pnpm-lock';
 import { isCargoLock, isPythonLock, parseTomlPackages } from './toml-packages';
 import { isCargoToml, parseCargoToml } from './cargo-toml';
 import { isGoSum, parseGoSum } from './go-sum';
-import { parseRequirementsTxt } from './pypi';
+import { isRequirementsTxt, parseRequirementsTxt } from './pypi';
 import { parseGoMod } from './gomod';
 import type { Dependency, Ecosystem } from '../types';
 
@@ -97,10 +97,18 @@ export function detectAndParse(content: string): ParsedManifest {
     result = { ecosystem: 'npm', dependencies: parsePnpmLock(trimmed), transitive: true };
   } else if (isYarnLock(trimmed)) {
     result = { ecosystem: 'npm', dependencies: parseYarnLock(trimmed), transitive: true };
-  } else {
+  } else if (isRequirementsTxt(trimmed)) {
     // requirements.txt は pip freeze なら実質完全だが、内容からは区別できない。
     // 分からないときは「見えていない依存があるかもしれない」側に倒す
     result = { ecosystem: 'pypi', dependencies: parseRequirementsTxt(trimmed), transitive: false };
+  } else {
+    // **ここを requirements.txt の受け皿にしないこと。**
+    // かつては無条件に requirements.txt として読んでいたため、Gemfile.lock や
+    // build.gradle を貼ると行頭の語がパッケージ名になり、何も検査できて
+    // いないのに普通のレポートが返っていた。分からないなら分からないと言う
+    throw new Error(
+      'This does not look like any supported manifest or lockfile. Supported: package.json, package-lock.json, pnpm-lock.yaml, yarn.lock, requirements.txt, poetry.lock, go.mod, go.sum, Cargo.toml, Cargo.lock.',
+    );
   }
 
   if (result.dependencies.length === 0) {
