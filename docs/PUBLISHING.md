@@ -62,7 +62,7 @@ curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guar
 | [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) | 9万スター | **受付終了**。コミュニティ一覧は廃止され公式レジストリに一本化された |
 | [appcypher/awesome-mcp-servers](https://github.com/appcypher/awesome-mcp-servers) | 5.8千スター | **アーカイブ済**。PR も issue も受け付けない |
 | [wong2/awesome-mcp-servers](https://github.com/wong2/awesome-mcp-servers) | 4.3千スター | PR不可。[mcpservers.org/submit](https://mcpservers.org/submit) のフォーム（**ブラウザとメールアドレスが要る**） |
-| [smithery.ai](https://smithery.ai) | 7千件超 | **登録済** `rcc-aoki/license-guard`。スキャンは3ツールを検出。ただし掲載本文は空のまま（後述） |
+| [smithery.ai](https://smithery.ai) | 7千件超 | **登録済** `rcc-aoki/license-guard`。掲載本文・3ツール・20リソース・2プロンプトすべて反映済。quality **100/100**（2026-08-25 実測） |
 
 ## ホスト名が 2 つある理由（触る前に読むこと）
 
@@ -75,6 +75,19 @@ curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=license-guar
 なるが、やらないこと。`licenseguard.tenchorooms.com` は無関係な家計簿サイトの
 サブドメインで、開発者から見ると不可解に映る。中立に見える workers.dev を
 機械向けの入口として残すほうが良い、という判断。
+
+**SEO を理由に掲載ホストを揃えようとしないこと。** 被リンクが欲しくなると
+「カタログ 6 箇所が正規ホストを指していないのは損では」と考えたくなるが、
+2026-08-25 に各掲載ページの `rel` を実測した結果、その筋は成立しない。
+
+| 掲載先 | リンク先 | `rel` | SEO 効果 |
+|---|---|---|---|
+| smithery.ai | `licenseguard.tenchorooms.com` | `noopener noreferrer` | **follow。既に正規ホストを指している** |
+| glama.ai | `license-guard.rcc-aoki.workers.dev` | `ugc nofollow` | 無し。向け直しても無し |
+
+つまり**効く 1 本は既に正しく向いており、向いていない方は nofollow なので
+向け直す価値が無い**。掲載ホストの変更は、導入済み利用者の設定を壊す risk だけを
+払って得るものが無い。測り直すなら `rel` から測ること。
 
 **どちらのホストも落とさない。** 特に `wrangler.toml` の `workers_dev = true` は
 消さないこと（理由はそのファイルに書いてある）。`npm run e2e:operational` が
@@ -105,7 +118,7 @@ URL が焼き付く前、つまり審査中の今が最も安い。
 | 条件 | 状態 |
 |---|---|
 | リリースが成功している | 済 |
-| quality score > 80 | **79**。description を入れて 55 → 79 まで上がった |
+| quality score > 80 | **済（100/100）**。55 → 79 → 100（2026-08-25 実測） |
 | homepage が設定されている | 済 |
 | homepage ホストの TXT | **不可**（上記） |
 | Smithery へのリンク | 済。README とサイト全ページのフッタに設置 |
@@ -122,9 +135,11 @@ URL が焼き付く前、つまり審査中の今が最も安い。
 ### 残っているもの
 
 - **mcpservers.org（wong2 系）**: フォームにブラウザとメールアドレスが要る
-- **Smithery の掲載本文**: CLI にメタデータを渡す口が無い（`--config-schema` のみ）。
-  スキャンログ上は `Capabilities found: 3 tools` まで通っているのに、掲載ページの
-  description / repository / tools が空。Web UI 側の設定項目と思われる
+
+Smithery の掲載本文は**解決済**。CLI にメタデータを渡す口が無いのは変わらないが、
+Web UI 側で入れた内容が反映され、description / repository / tools / resources /
+prompts すべて描画されている。quality も 100/100 になり、残る verified の欠けは
+「homepage ホストの TXT」と「有料 developer plan」の2つだけになった。
 
 ## パッケージ公開（GHCR）
 
