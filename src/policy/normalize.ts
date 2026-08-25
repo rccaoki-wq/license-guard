@@ -40,6 +40,7 @@ const LEGACY_ALIASES: Record<string, string> = {
   // ライセンス本文がまるごと入っている欄（pandas は BSD 3-Clause の
   // 全文を書いている）から接頭辞だけ拾ってしまう
   'apache license 2.0': 'Apache-2.0',
+  'apache 2.0 license': 'Apache-2.0',
   '3-clause bsd license': 'BSD-3-Clause',
   '2-clause bsd license': 'BSD-2-Clause',
   'isc license': 'ISC',

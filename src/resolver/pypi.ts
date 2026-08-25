@@ -1,5 +1,5 @@
 import parse from 'spdx-expression-parse';
-import { fetchJson } from './http';
+import { fetchJson, fetchTextHead } from './http';
 import { normalizeLicenseString } from '../policy/normalize';
 import { categorize } from '../policy/categories';
 import type { LicenseLookup } from './index';
@@ -117,11 +117,21 @@ interface PypiDoc {
     license_expression?: string | null;
     classifiers?: string[];
   };
+  /** 最新リリースの配布物一覧。PEP 658 のメタデータ有無もここに出る */
+  urls?: {
+    packagetype?: string;
+    url?: string;
+    'core-metadata'?: unknown;
+  }[];
 }
 
 /** 自由記述の info.license から、既知の識別子として読める場合のみ取り出す */
 function fromFreeText(doc: PypiDoc): string | null {
-  const raw = doc.info?.license?.trim();
+  return fromRawLicenseString(doc.info?.license ?? null);
+}
+
+function fromRawLicenseString(value: string | null): string | null {
+  const raw = value?.trim();
   if (!raw) return null;
 
   const normalized = normalizeLicenseString(raw);
@@ -199,6 +209,74 @@ function join(ids: string[]): string | null {
   return unique.join(' OR ');
 }
 
+/**
+ * ヘッダから 1 行だけ取り出す。
+ *
+ * **完全な行しか返さない。** Range で先頭だけ取っているので、最後の行は
+ * 途中で切れている可能性がある。切れた値をそのまま使うと
+ * `BSD-3-` のような識別子ができあがる。
+ */
+function headerValue(headers: string[], field: string): string | null {
+  const prefix = `${field.toLowerCase()}:`;
+  for (const line of headers) {
+    if (line.toLowerCase().startsWith(prefix)) return line.slice(prefix.length).trim();
+  }
+  return null;
+}
+
+const METADATA_HEAD_BYTES = 16_384;
+
+/**
+ * 配布物（wheel）の core metadata からライセンスを読む。
+ *
+ * **PyPI の JSON API は PEP 639 の欄を埋めていないことがある。**
+ * fsspec・azure-core・azure-identity・mypy-extensions は
+ * `info.license`・`info.license_expression`・分類子のすべてが空なのに、
+ * wheel のメタデータには `License-Expression: BSD-3-Clause` と書いてある。
+ * どれも上位 400 件に入る。JSON API だけを見ていたので、**明記されている
+ * ライセンスを「不明」と答えていた。**
+ *
+ * 照会は 1 回だけ。しかも JSON API で解決できなかったときにしか走らない
+ * （上位 400 件では 9 件）。取得も先頭 16KB に限る —— 本体には README が
+ * まるごと入っていて数十 KB になる。
+ */
+async function fromWheelMetadata(
+  doc: PypiDoc,
+  fetchImpl: typeof fetch,
+): Promise<string | null> {
+  const wheel = (doc.urls ?? []).find(
+    (u) => u.packagetype === 'bdist_wheel' && u['core-metadata'] && u.url,
+  );
+  if (!wheel?.url) return null;
+
+  const text = await fetchTextHead(`${wheel.url}.metadata`, METADATA_HEAD_BYTES, fetchImpl);
+  if (text === null) return null;
+
+  // **空行より後は読まない。** そこから先は README 本文で、
+  // 「MIT License」のような語がいくらでも出てくる
+  const head = text.split(/\r?\n\r?\n/, 1)[0] ?? '';
+  // 最後の行は Range で切れている可能性があるので落とす
+  const lines = head.split(/\r?\n/);
+  if (!/\n$/.test(head)) lines.pop();
+
+  const expression = headerValue(lines, 'License-Expression');
+  if (expression !== null) {
+    const resolved = fromRawLicenseString(expression);
+    if (resolved !== null) return resolved;
+  }
+
+  // 旧来の License 欄。自由記述なので JSON API 側と同じ規律で読む
+  return fromRawLicenseString(headerValue(lines, 'License'));
+}
+
+/**
+ * 1 つのリリース文書からライセンスを決める。
+ * メタデータへの追加照会は、JSON API で決まらなかったときだけ走る。
+ */
+async function resolveDoc(doc: PypiDoc, fetchImpl: typeof fetch): Promise<string | null> {
+  return extract(doc) ?? (await fromWheelMetadata(doc, fetchImpl));
+}
+
 export async function fetchPypiLicense(
   name: string,
   version: string | null,
@@ -212,14 +290,14 @@ export async function fetchPypiLicense(
       `${base}/${encodeURIComponent(version)}/json`,
       fetchImpl,
     );
-    const spdx = pinned ? extract(pinned) : null;
+    const spdx = pinned ? await resolveDoc(pinned, fetchImpl) : null;
     if (spdx !== null) return { spdx };
   }
 
   const doc = await fetchJson<PypiDoc>(`${base}/json`, fetchImpl);
   if (doc === null) return { spdx: null };
 
-  const spdx = extract(doc);
+  const spdx = await resolveDoc(doc, fetchImpl);
   if (spdx === null) return { spdx: null };
   return version === null ? { spdx } : { spdx, fromLatest: true };
 }

@@ -178,14 +178,97 @@ describe('自由記述の欄に、正しい SPDX 式が書かれていること�
     }
   });
 
-  it('綴りの揺れは別名で拾う（protobuf / multidict の実データ）', async () => {
+  it('綴りの揺れは別名で拾う（protobuf / multidict / transformers の実データ）', async () => {
     for (const [declared, expected] of [
       ['Apache License 2.0', 'Apache-2.0'],
+      // transformers。語順が違うだけで別物として落ちていた
+      ['Apache 2.0 License', 'Apache-2.0'],
       ['3-Clause BSD License', 'BSD-3-Clause'],
       ['ISC License', 'ISC'],
     ] as const) {
       const f = mockFetch({ info: { license: declared, classifiers: [] } });
       expect((await fetchPypiLicense('foo', null, f)).spdx).toBe(expected);
     }
+  });
+});
+
+describe('JSON API が空でも、wheel のメタデータには書いてある', () => {
+  /**
+   * **PyPI の JSON API は PEP 639 の欄を埋めていないことがある。**
+   * fsspec / azure-core / azure-identity / mypy-extensions は
+   * `info.license`・`info.license_expression`・分類子のすべてが空なのに、
+   * 配布物本体（wheel）のメタデータには
+   * `License-Expression: BSD-3-Clause` と書かれている。
+   *
+   * これらは PyPI 上位 400 件に入る。JSON API だけを見ていた結果、
+   * ライセンスが明記されているパッケージを「不明」と答えていた。
+   *
+   * 追加の照会は 1 回だけ。しかも JSON API で解決できなかったときにしか
+   * 走らない（上位 400 件では 9 件）。
+   */
+  function routed(map: Record<string, unknown>, text?: string) {
+    return vi.fn(async (url: string) => {
+      if (typeof url === 'string' && url.endsWith('.metadata')) {
+        if (text === undefined) return { ok: false, text: async () => '' };
+        return { ok: true, text: async () => text };
+      }
+      const body = map[url as string] ?? map['*'];
+      return body === undefined ? { ok: false, json: async () => ({}) } : { ok: true, json: async () => body };
+    }) as unknown as typeof fetch;
+  }
+
+  const emptyDoc = {
+    info: { license: null, license_expression: null, classifiers: [] },
+    urls: [
+      { packagetype: 'sdist', url: 'https://files.pythonhosted.org/a.tar.gz' },
+      {
+        packagetype: 'bdist_wheel',
+        url: 'https://files.pythonhosted.org/fsspec-1-py3-none-any.whl',
+        'core-metadata': { sha256: 'x' },
+      },
+    ],
+  };
+
+  it('License-Expression を読む（fsspec の実データ）', async () => {
+    const f = routed({ '*': emptyDoc }, 'Metadata-Version: 2.4\nName: fsspec\nLicense-Expression: BSD-3-Clause\nLicense-File: LICENSE\n');
+    expect((await fetchPypiLicense('fsspec', null, f)).spdx).toBe('BSD-3-Clause');
+  });
+
+  it('自由記述の License 行も同じ規律で読む（tiktoken の実データ）', async () => {
+    const f = routed({ '*': emptyDoc }, 'Metadata-Version: 2.1\nName: tiktoken\nLicense: MIT License\n');
+    expect((await fetchPypiLicense('tiktoken', null, f)).spdx).toBe('MIT');
+  });
+
+  /**
+   * メタデータ本体には README がまるごと入っている。**空行より後は読まない。**
+   * 読むと本文中の "MIT License" のような語を識別子として拾う。
+   */
+  it('ヘッダ部分より後は読まない', async () => {
+    const f = routed({ '*': emptyDoc }, 'Metadata-Version: 2.1\nName: x\nLicense-File: LICENSE\n\nLicense-Expression: MIT\n# README\n');
+    expect((await fetchPypiLicense('x', null, f)).spdx).toBeNull();
+  });
+
+  it('Range で切れた行は使わない', async () => {
+    // 末尾が改行で終わっていない＝値が途中で切れている可能性がある
+    const f = routed({ '*': emptyDoc }, 'Metadata-Version: 2.4\nName: fsspec\nLicense-Expression: BSD-3-');
+    expect((await fetchPypiLicense('fsspec', null, f)).spdx).toBeNull();
+  });
+
+  it('メタデータに書かれていない散文は拾わない', async () => {
+    const f = routed({ '*': emptyDoc }, 'Metadata-Version: 2.1\nName: x\nLicense: see the LICENSE file\n');
+    expect((await fetchPypiLicense('x', null, f)).spdx).toBeNull();
+  });
+
+  it('JSON API で解決できるなら追加の照会をしない', async () => {
+    const doc = { info: { license_expression: 'MIT', classifiers: [] }, urls: emptyDoc.urls };
+    const f = routed({ '*': doc }, 'License-Expression: Apache-2.0\n');
+    expect((await fetchPypiLicense('x', null, f)).spdx).toBe('MIT');
+    const calls = (f as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(calls.some((c) => String(c[0]).endsWith('.metadata'))).toBe(false);
+  });
+
+  it('wheel が無ければ何もしない', async () => {
+    const doc = { info: { classifiers: [] }, urls: [{ packagetype: 'sdist', url: 'https://x/a.tar.gz' }] };
+    expect((await fetchPypiLicense('x', null, routed({ '*': doc }, 'License-Expression: MIT\n'))).spdx).toBeNull();
   });
 });
