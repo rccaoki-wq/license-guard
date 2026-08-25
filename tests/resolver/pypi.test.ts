@@ -133,3 +133,59 @@ describe('曖昧な classifier の扱い', () => {
     expect((await fetchPypiLicense('p', null, f)).spdx).toBe('GPL');
   });
 });
+
+describe('自由記述の欄に、正しい SPDX 式が書かれていることがある', () => {
+  /**
+   * `info.license` は自由記述の欄だが、**そこに正しい SPDX 式を書く
+   * パッケージが実在する。** aiohttp は "Apache-2.0 AND MIT"、
+   * tqdm は "MPL-2.0 AND MIT"。どちらも PyPI 上位 150 件に入る。
+   *
+   * 以前はこれを捨てて「判定不能」を返していた。単一識別子の形
+   * （空白を含まない）しか受け取らなかったため、空白を含む式が
+   * すべて振るい落とされていた。**推測ではなく構文解析で確かめる**
+   * ので、緩い方に外れることはない。
+   */
+  it('AND で結ばれた式を受け取る（aiohttp / tqdm の実データ）', async () => {
+    for (const [name, expr] of [
+      ['aiohttp', 'Apache-2.0 AND MIT'],
+      ['tqdm', 'MPL-2.0 AND MIT'],
+    ] as const) {
+      const f = mockFetch({ info: { license: expr, classifiers: [] } });
+      expect((await fetchPypiLicense(name, null, f)).spdx).toBe(expr);
+    }
+  });
+
+  it('OR で結ばれた式も受け取る', async () => {
+    const f = mockFetch({ info: { license: 'MIT OR Apache-2.0', classifiers: [] } });
+    expect((await fetchPypiLicense('sniffio', null, f)).spdx).toBe('MIT OR Apache-2.0');
+  });
+
+  /**
+   * ここが肝心。**式として読めない散文は、今まで通り捨てる。**
+   * 受け皿にすると、ライセンス本文がまるごと「ライセンス識別子」になる。
+   */
+  it('散文は受け取らない（実データで確かめる）', async () => {
+    for (const prose of [
+      'Dual Licensed - GNU AFFERO GPL 3.0 or Artifex Commercial License',
+      'wxWindows Library License (https://opensource.org/licenses/wxwindows.php)',
+      'LGPL with exceptions',
+      'BSD, Public Domain',
+      'Dual License',
+      'BSD 3-Clause License\n\n         Copyright (c) 2008-2011, AQR Capital Management',
+    ]) {
+      const f = mockFetch({ info: { license: prose, classifiers: [] } });
+      expect((await fetchPypiLicense('foo', null, f)).spdx).toBeNull();
+    }
+  });
+
+  it('綴りの揺れは別名で拾う（protobuf / multidict の実データ）', async () => {
+    for (const [declared, expected] of [
+      ['Apache License 2.0', 'Apache-2.0'],
+      ['3-Clause BSD License', 'BSD-3-Clause'],
+      ['ISC License', 'ISC'],
+    ] as const) {
+      const f = mockFetch({ info: { license: declared, classifiers: [] } });
+      expect((await fetchPypiLicense('foo', null, f)).spdx).toBe(expected);
+    }
+  });
+});

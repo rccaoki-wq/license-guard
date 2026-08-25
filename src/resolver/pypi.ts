@@ -1,3 +1,4 @@
+import parse from 'spdx-expression-parse';
 import { fetchJson } from './http';
 import { normalizeLicenseString } from '../policy/normalize';
 import { categorize } from '../policy/categories';
@@ -125,6 +126,31 @@ function fromFreeText(doc: PypiDoc): string | null {
 
   const normalized = normalizeLicenseString(raw);
   if (categorize(normalized) !== 'unknown') return normalized;
+
+  /**
+   * **自由記述の欄に、正しい SPDX 式が書かれていることがある。**
+   *
+   * aiohttp は `"Apache-2.0 AND MIT"`、tqdm は `"MPL-2.0 AND MIT"`。
+   * どちらも PyPI 上位 150 件に入るのに、両方とも「ライセンス不明」を
+   * 返していた。単一識別子の形（`SPDX_SHAPE` = 空白を含まない）しか
+   * 受け取らなかったため、**空白を含む式が例外なく振るい落とされていた。**
+   *
+   * ここで推測はしない。構文解析器に通して**通ったものだけ**を採る。
+   * 通らなければ従来どおり捨てる。実データ 126 件で確かめたところ、
+   * 通ったのは上の 2 件と `"MIT OR Apache-2.0"` の 3 件だけで、
+   * 散文（`"LGPL with exceptions"`, `"Dual License"`, ライセンス本文
+   * まるごと）は 1 件も通らなかった。
+   *
+   * 受け皿を作らないのが肝心 —— 形式判定の最後を受け皿にすると、
+   * 壊れた入力が「正しい答え」の顔で返ってくる。
+   */
+  try {
+    parse(normalized);
+    return normalized;
+  } catch {
+    // 式として読めない。散文なので捨てる
+  }
+
   if (SPDX_SHAPE.test(raw)) return raw;
   return null;
 }

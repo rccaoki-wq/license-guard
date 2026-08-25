@@ -34,6 +34,15 @@ const LEGACY_ALIASES: Record<string, string> = {
   mit: 'MIT',
   'mit license': 'MIT',
   isc: 'ISC',
+
+  // 版・条項数まで書いてあるのに綴りが SPDX と違うもの。
+  // **完全一致のみ。** 「〜 License を落とす」のような規則にすると、
+  // ライセンス本文がまるごと入っている欄（pandas は BSD 3-Clause の
+  // 全文を書いている）から接頭辞だけ拾ってしまう
+  'apache license 2.0': 'Apache-2.0',
+  '3-clause bsd license': 'BSD-3-Clause',
+  '2-clause bsd license': 'BSD-2-Clause',
+  'isc license': 'ISC',
   gpl: 'GPL-3.0-only',
   'gpl-2': 'GPL-2.0-only',
   'gpl-3': 'GPL-3.0-only',
