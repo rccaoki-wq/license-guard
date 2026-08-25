@@ -119,6 +119,8 @@ Problem licenses usually arrive as a dependency of a dependency, not as somethin
 
 **An incomplete scan is never reported as clean.** Dependencies that could not be resolved appear as `not-checked` or `review` and are counted in the summary. They never become `allowed`.
 
+A single scan performs at most 200 registry lookups, which bounds what one request can cost. Cached packages don't consume that budget, so the ceiling only binds on packages nobody has looked up yet — a first scan of a ~900-crate `Cargo.lock` typically leaves a few hundred entries marked `not-checked`, and scanning again resolves them. The result says so explicitly rather than quietly showing a shorter list.
+
 ## Status
 
 **Phase 0 — validating willingness to pay.** The MCP server and the free web tool are live. Because the real point of use is inside an agent's workflow rather than a search result, the signal being measured is MCP installs and repeat tool calls, not click-through rate. The GitHub App (Phase 1) starts only if that signal shows up.
