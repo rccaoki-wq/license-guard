@@ -36,6 +36,47 @@ interface ClearlyDefinedDoc {
  */
 export const CLEARLYDEFINED_TIMEOUT_MS = 3_000;
 
+/**
+ * ClearlyDefined から使ってよい答えかを判定する。
+ *
+ * 中身が空同然の値をそのまま採ると、**解決できていないものを解決したと
+ * 数える**。実測では deps.dev が NuGet の欠損 63 件すべてに
+ * `non-standard` を返していた。件数だけ見ると 63/63 埋まったように
+ * 見えるが、利用者に見せられる情報は一つも増えていない。
+ *
+ * `LicenseRef-scancode-*` も落とす。あれは本文を機械で読んだ**推定**で、
+ * 宣言ではない。ScanCode は CLA・保証免責・特許条項・出所不明の言及にも
+ * これを付けるが、どれも同梱コードの許諾ではない。MediatR には
+ * `RPL-1.5 AND LicenseRef-scancode-unknown-license-reference` が付いていた。
+ * もっともらしい誤りは、答えが無いことより悪い。
+ *
+ * **この判定は ClearlyDefined の記録に対する規則で、生態系には依らない。**
+ * 以前は nuget.ts に置いていたので Go の経路だけが素通りしていて、実在の
+ * go.mod では `github.com/fatih/color`（素の MIT）が
+ * `LicenseRef-scancode-unknown-license-reference AND MIT` として review に
+ * 落ちていた。判定を記録の側に置いて、両方の経路から使う。
+ */
+export function usableDeclared(declared: string | undefined): string | null {
+  const d = declared?.trim();
+  if (!d) return null;
+  if (/^(NOASSERTION|OTHER|non-standard|UNKNOWN)$/i.test(d)) return null;
+  if (/LicenseRef-scancode/i.test(d)) return null;
+  return dedupeAndTerms(d);
+}
+
+/**
+ * `MIT AND MIT AND BSD-3-Clause AND BSD-3-Clause` のような重複を畳む。
+ * ClearlyDefined が実際にこの形を返す（Bogus、consul のサブモジュール）。
+ * **AND だけの式に限る**——OR や括弧や WITH が混ざる式は構造を壊しうるので
+ * 触らない。
+ */
+export function dedupeAndTerms(expr: string): string {
+  if (/[()]|\bOR\b|\bWITH\b/i.test(expr)) return expr;
+  const parts = expr.split(/\s+AND\s+/i).map((p) => p.trim());
+  if (parts.length < 2) return expr;
+  return [...new Set(parts)].join(' AND ');
+}
+
 /** 未収録の座標では declared が無い、あるいは NOASSERTION になる */
 async function declaredLicense(
   modulePath: string,
@@ -44,9 +85,7 @@ async function declaredLicense(
 ): Promise<string | null> {
   const url = `https://api.clearlydefined.io/definitions/${toGoCoordinates(modulePath, revision)}`;
   const doc = await fetchJson<ClearlyDefinedDoc>(url, fetchImpl, CLEARLYDEFINED_TIMEOUT_MS);
-  const declared = doc?.licensed?.declared?.trim();
-  if (!declared || declared === 'NOASSERTION') return null;
-  return declared;
+  return usableDeclared(doc?.licensed?.declared);
 }
 
 /** 最新版が未収録だったときに試す旧版の数 */

@@ -1,5 +1,5 @@
 import { fetchJson, fetchTextHead } from './http';
-import { CLEARLYDEFINED_TIMEOUT_MS } from './clearlydefined';
+import { CLEARLYDEFINED_TIMEOUT_MS, usableDeclared } from './clearlydefined';
 import type { LicenseLookup } from './index';
 
 /**
@@ -26,38 +26,6 @@ export function normalizeNugetVersion(raw: string): string {
   const core = [Number(a), Number(b), Number(c ?? 0)].join('.');
   const withRevision = d !== undefined && Number(d) !== 0 ? `${core}.${Number(d)}` : core;
   return withRevision + (pre ?? '');
-}
-
-/**
- * ClearlyDefined から使ってよい答えかを判定する。
- *
- * 中身が空同然の値をそのまま採ると、**解決できていないものを解決したと
- * 数える**。実測では deps.dev が NuGet の欠損 63 件すべてに
- * `non-standard` を返していた。件数だけ見ると 63/63 埋まったように
- * 見えるが、利用者に見せられる情報は一つも増えていない。
- *
- * `LicenseRef-scancode-*` も落とす。あれは本文を機械で読んだ**推定**で、
- * 宣言ではない。MediatR には `RPL-1.5 AND LicenseRef-scancode-unknown-license-reference`
- * が付いていた。もっともらしい誤りは、答えが無いことより悪い。
- */
-function usableDeclared(declared: string | undefined): string | null {
-  const d = declared?.trim();
-  if (!d) return null;
-  if (/^(NOASSERTION|OTHER|non-standard|UNKNOWN)$/i.test(d)) return null;
-  if (/LicenseRef-scancode/i.test(d)) return null;
-  return dedupeAndTerms(d);
-}
-
-/**
- * `MIT AND MIT AND BSD-3-Clause AND BSD-3-Clause` のような重複を畳む。
- * ClearlyDefined が実際にこの形を返す（Bogus）。**AND だけの式に限る**
- * ——OR や括弧や WITH が混ざる式は構造を壊しうるので触らない。
- */
-export function dedupeAndTerms(expr: string): string {
-  if (/[()]|\bOR\b|\bWITH\b/i.test(expr)) return expr;
-  const parts = expr.split(/\s+AND\s+/i).map((p) => p.trim());
-  if (parts.length < 2) return expr;
-  return [...new Set(parts)].join(' AND ');
 }
 
 interface ClearlyDefinedDoc {

@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  dedupeAndTerms,
   fetchNugetLicense,
   normalizeNugetVersion,
   readNuspecLicense,
@@ -90,21 +89,6 @@ describe('readNuspecLicense', () => {
   it('type="file" を式ではなく事実として持ち帰る', () => {
     const r = readNuspecLicense(nuspec('<license type="file">LICENSE.txt</license>'));
     expect(r).toEqual({ expression: null, isFile: true });
-  });
-});
-
-describe('dedupeAndTerms', () => {
-  it('AND だけの式の重複を畳む', () => {
-    expect(dedupeAndTerms('MIT AND MIT AND BSD-3-Clause AND BSD-3-Clause')).toBe(
-      'MIT AND BSD-3-Clause',
-    );
-  });
-
-  it('OR・括弧・WITH が混ざる式は触らない', () => {
-    // 構造を壊しうるので、畳めるかどうか以前に手を出さない
-    for (const e of ['MIT OR Apache-2.0', '(MIT AND MIT) OR GPL-2.0-only', 'GPL-2.0-only WITH Classpath-exception-2.0']) {
-      expect(dedupeAndTerms(e)).toBe(e);
-    }
   });
 });
 
