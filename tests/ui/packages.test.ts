@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderPackageIndex } from '../../src/ui/packages';
-import { renderPackagePage } from '../../src/ui/pkg';
+import { packagePath, renderPackagePage } from '../../src/ui/pkg';
+import { ECOSYSTEMS } from '../../src/types';
 import { verdictMatrix } from '../../src/policy/matrix';
 import { renderLicenseIndex } from '../../src/ui/license';
 import { buildSitemap, type SitemapPackage } from '../../src/seo/sitemap';
@@ -30,6 +31,31 @@ describe('renderPackageIndex', () => {
     );
     expect(inSitemap.length).toBeGreaterThan(0);
     for (const path of inSitemap) expect(html).toContain(`href="${path}"`);
+  });
+
+  /**
+   * 上の不変条件は前から書いてあったが、**固定データが npm/pypi しか
+   * 持っていなかったので落ちようがなかった。**
+   *
+   * 本番では rubygems の 6 ページが sitemap に載っているのに一覧から
+   * リンクされていなかった。一覧が並び順を `['npm','pypi','go','cargo']`
+   * という別の配列で持っていて、`ECOSYSTEMS` に後から足した 2 つが
+   * そこに無かったため。型は通る（Ecosystem[] として正しい）し、
+   * ページも 200 を返す。どこからもリンクされないだけ。
+   *
+   * 固定データを `ECOSYSTEMS` から作れば、系を足したときに
+   * 覚えていなくてもここが落ちる
+   */
+  it('どのエコシステムも一覧から漏れない', () => {
+    const all: SitemapPackage[] = ECOSYSTEMS.map((ecosystem) => ({
+      ecosystem,
+      name: `pkg-${ecosystem}`,
+      spdx: 'GPL-3.0-only',
+    }));
+    const html = renderPackageIndex(all);
+    for (const p of all) {
+      expect(html).toContain(`href="${packagePath(p.ecosystem, p.name)}"`);
+    }
   });
 
   it('canonical と description を持つ', () => {

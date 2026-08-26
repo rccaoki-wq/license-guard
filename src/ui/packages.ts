@@ -14,9 +14,27 @@ import { verdictMatrix } from '../policy/matrix';
 import { packagePageSaysSomething, type SitemapPackage } from '../seo/sitemap';
 import { DEFAULT_LINKAGE, ECOSYSTEM_LABEL, packagePath } from './pkg';
 import { collectionJsonLd, esc, renderLayout, scanCta } from './layout';
-import type { Ecosystem, Linkage } from '../types';
+import { ECOSYSTEMS, type Ecosystem, type Linkage } from '../types';
 
-const ECOSYSTEM_ORDER: Ecosystem[] = ['npm', 'pypi', 'go', 'cargo'];
+/**
+ * 見出しを出す順。
+ *
+ * **`Ecosystem[]` ではなく `Record<Ecosystem, number>` で持つ。** 配列だと
+ * 系を足したときに書き忘れても型が通り、その系のパッケージは一覧から
+ * 黙って消える。ページは 200 を返し、sitemap にも載るのに、どこからも
+ * リンクされない孤児になる。実際 rubygems の 6 ページがその状態だった。
+ * Record なら足した瞬間に型検査が落ちる
+ */
+const ECOSYSTEM_RANK: Record<Ecosystem, number> = {
+  npm: 0,
+  pypi: 1,
+  go: 2,
+  cargo: 3,
+  rubygems: 4,
+  nuget: 5,
+};
+
+const ECOSYSTEM_ORDER = ECOSYSTEMS.slice().sort((a, b) => ECOSYSTEM_RANK[a] - ECOSYSTEM_RANK[b]);
 
 /**
  * 一覧に出す一行。
