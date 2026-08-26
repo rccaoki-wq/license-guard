@@ -188,6 +188,66 @@ describe('buildSitemap', () => {
     expect(count).toBe(1);
   });
 
+  /**
+   * 本番の sitemap を実測したら、パッケージページ 134 件の本文が
+   * **34 種類しかなかった**。名前を伏せると (ecosystem, spdx) が同じページは
+   * 1 文字も違わない（10 組を照合して 10 組とも一致）。cargo の MPL-2.0 だけで
+   * 56 件が同じ本文だった。
+   *
+   * `packagePageSaysSomething` は「そのライセンスのページが言うことを持つか」を
+   * 見ており、これは正しい。ただし**判定の単位がライセンスなので、同じ
+   * ライセンスのパッケージが何件あっても全部通る。**「言い直しを何百件も
+   * 自分から提出しない」という元の意図は、ライセンス単位の可否では達成できない
+   */
+  it('本文が同じになるパッケージは 1 件だけ提出する', () => {
+    const xml = buildSitemap([
+      { ecosystem: 'cargo', name: 'cbindgen', spdx: 'MPL-2.0' },
+      { ecosystem: 'cargo', name: 'app_units', spdx: 'MPL-2.0' },
+      { ecosystem: 'cargo', name: 'selectors', spdx: 'MPL-2.0' },
+    ]);
+    const listed = ['cbindgen', 'app_units', 'selectors'].filter((n) =>
+      xml.includes(`/pkg/cargo/${n}<`),
+    );
+    expect(listed).toHaveLength(1);
+  });
+
+  it('ecosystem が違えば本文も違うので別々に出す', () => {
+    const xml = buildSitemap([
+      { ecosystem: 'cargo', name: 'cbindgen', spdx: 'MPL-2.0' },
+      { ecosystem: 'npm', name: 'lightningcss', spdx: 'MPL-2.0' },
+      { ecosystem: 'go', name: 'github.com/hashicorp/go-multierror', spdx: 'MPL-2.0' },
+    ]);
+    expect(xml).toContain('/pkg/cargo/cbindgen<');
+    expect(xml).toContain('/pkg/npm/lightningcss<');
+    expect(xml).toContain('/pkg/go/github.com/hashicorp/go-multierror<');
+  });
+
+  it('ライセンスが違えば同じ ecosystem でも両方出す', () => {
+    const xml = buildSitemap([
+      { ecosystem: 'npm', name: 'a-mpl', spdx: 'MPL-2.0' },
+      { ecosystem: 'npm', name: 'a-agpl', spdx: 'AGPL-3.0-only' },
+    ]);
+    expect(xml).toContain('/pkg/npm/a-mpl<');
+    expect(xml).toContain('/pkg/npm/a-agpl<');
+  });
+
+  /**
+   * **代表は DB の行順で決めない。** 順序で決めると、同じ内容の sitemap が
+   * クロールのたびに別の URL を指すことになり、どちらも定着しない。
+   * 意味のある優劣は無いので、文脈に依らない順（コードポイント順）で固定する
+   */
+  it('代表は入力の順序で変わらない', () => {
+    const pkgs: { ecosystem: 'cargo'; name: string; spdx: string }[] = [
+      { ecosystem: 'cargo', name: 'selectors', spdx: 'MPL-2.0' },
+      { ecosystem: 'cargo', name: 'app_units', spdx: 'MPL-2.0' },
+      { ecosystem: 'cargo', name: 'cbindgen', spdx: 'MPL-2.0' },
+    ];
+    const a = buildSitemap(pkgs);
+    const b = buildSitemap([...pkgs].reverse());
+    expect(a).toBe(b);
+    expect(a).toContain('/pkg/cargo/app_units<');
+  });
+
   it('XML として妥当な形をしている', () => {
     const xml = buildSitemap([]);
     expect(xml.startsWith('<?xml')).toBe(true);
