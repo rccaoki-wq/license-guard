@@ -22,6 +22,7 @@ const resolvesNothing = {
   pypi: async () => ({ spdx: null }),
   go: async () => ({ spdx: null }),
   cargo: async () => ({ spdx: null }),
+  rubygems: async () => ({ spdx: null }),
 };
 
 /** workspace メンバーを 1 件だけ含む yarn.lock */

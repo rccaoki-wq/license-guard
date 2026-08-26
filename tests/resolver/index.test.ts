@@ -30,7 +30,7 @@ describe('LicenseResolver', () => {
     const cache = stubCache();
     await cache.put(dep(), 'MIT', 'registry');
     const npm = vi.fn();
-    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn() });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn() });
 
     const out = await r.resolve(dep());
     // キャッシュ経由でも出所（registry / registry-latest）を保つ
@@ -41,7 +41,7 @@ describe('LicenseResolver', () => {
   it('キャッシュミス時はエコシステムに応じたフェッチャを呼びキャッシュに書く', async () => {
     const cache = stubCache();
     const npm = vi.fn(async () => ({ spdx: 'Apache-2.0' }));
-    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn() });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn() });
 
     const out = await r.resolve(dep());
     expect(out).toEqual({ spdx: 'Apache-2.0', resolvedFrom: 'registry' });
@@ -52,7 +52,7 @@ describe('LicenseResolver', () => {
   it('go は clearlydefined を出典として記録する', async () => {
     const cache = stubCache();
     const go = vi.fn(async () => ({ spdx: 'BSD-3-Clause' }));
-    const r = new LicenseResolver(cache, { npm: vi.fn(), pypi: vi.fn(), go, cargo: vi.fn() });
+    const r = new LicenseResolver(cache, { npm: vi.fn(), pypi: vi.fn(), go, cargo: vi.fn(), rubygems: vi.fn() });
 
     const out = await r.resolve(
       dep({ ecosystem: 'go', name: 'github.com/a/b', version: 'v1.0.0' }),
@@ -63,7 +63,7 @@ describe('LicenseResolver', () => {
   it('解決できない場合は unresolved を返す', async () => {
     const cache = stubCache();
     const npm = vi.fn(async () => ({ spdx: null }));
-    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn() });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn() });
 
     const out = await r.resolve(dep());
     expect(out).toEqual({ spdx: null, resolvedFrom: 'unresolved' });
@@ -74,7 +74,7 @@ describe('LicenseResolver', () => {
     const npm = vi.fn(async () => {
       throw new Error('network down');
     });
-    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn() });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn() });
 
     const out = await r.resolve(dep());
     expect(out.resolvedFrom).toBe('unresolved');
@@ -86,7 +86,7 @@ describe('LicenseResolver', () => {
   it('解決できなかったパッケージ名はキャッシュに書かない', async () => {
     const cache = stubCache();
     const npm = vi.fn(async () => ({ spdx: null }));
-    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn() });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn() });
 
     await r.resolve(dep({ name: '@acme-internal/billing' }));
     expect(cache.store.size).toBe(0);
@@ -97,7 +97,7 @@ describe('LicenseResolver', () => {
     const npm = vi.fn(async () => {
       throw new Error('network down');
     });
-    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn() });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn() });
 
     await r.resolve(dep({ name: '@acme-internal/billing' }));
     expect(cache.store.size).toBe(0);
@@ -106,7 +106,7 @@ describe('LicenseResolver', () => {
   it('resolveAll は全依存を解決する', async () => {
     const cache = stubCache();
     const npm = vi.fn(async () => ({ spdx: 'MIT' }));
-    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn() });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn() });
 
     const out = await r.resolveAll([dep(), dep({ name: 'hono', version: '4.6.0' })]);
     expect(out).toHaveLength(2);
@@ -131,6 +131,7 @@ describe('キャッシュ書き込みの失敗が読み取りを壊さない', (
       pypi: async () => ({ spdx: null }),
       go: async () => ({ spdx: null }),
       cargo: async () => ({ spdx: null }),
+      rubygems: async () => ({ spdx: null }),
     });
 
     expect(await r.resolve(dep())).toEqual({ spdx: 'MIT', resolvedFrom: 'registry' });
@@ -148,6 +149,7 @@ describe('キャッシュ書き込みの失敗が読み取りを壊さない', (
       pypi: async () => ({ spdx: null }),
       go: async () => ({ spdx: null }),
       cargo: async () => ({ spdx: null }),
+      rubygems: async () => ({ spdx: null }),
     });
 
     expect((await r.resolve(dep())).spdx).toBe('MIT');

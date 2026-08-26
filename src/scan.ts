@@ -23,6 +23,7 @@ const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
   // Go と Rust は既定で静的リンクされる
   go: 'static',
   cargo: 'static',
+  rubygems: 'dynamic',
 };
 
 /**

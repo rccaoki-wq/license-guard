@@ -9,6 +9,7 @@ const allMit = {
   pypi: async () => ({ spdx: null }),
   go: async () => ({ spdx: null }),
   cargo: async () => ({ spdx: null }),
+  rubygems: async () => ({ spdx: null }),
 };
 
 function bigLock(n: number) {
@@ -30,6 +31,7 @@ describe('上限を超えたときの部分的な結果', () => {
       pypi: async () => ({ spdx: null }),
       go: async () => ({ spdx: null }),
       cargo: async () => ({ spdx: null }),
+      rubygems: async () => ({ spdx: null }),
     };
     await scan(bigLock(MAX_LOOKUPS + 100), 'saas', noopCache, counting);
     expect(calls).toBeLessThanOrEqual(MAX_LOOKUPS);
@@ -76,6 +78,7 @@ describe('上限を超えたときの部分的な結果', () => {
       pypi: async () => ({ spdx: null }),
       go: async () => ({ spdx: null }),
       cargo: async () => ({ spdx: null }),
+      rubygems: async () => ({ spdx: null }),
     };
     const r = await scan(bigLock(MAX_LOOKUPS + 300), 'saas', warm, counting);
     expect(calls).toBe(0);

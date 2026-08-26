@@ -17,6 +17,7 @@ export const ECOSYSTEM_LABEL: Record<Ecosystem, string> = {
   pypi: 'PyPI',
   go: 'Go module',
   cargo: 'Rust crate',
+  rubygems: 'Ruby gem',
 };
 
 const MANIFEST_NAME: Record<Ecosystem, string> = {
@@ -24,6 +25,7 @@ const MANIFEST_NAME: Record<Ecosystem, string> = {
   pypi: 'requirements.txt',
   go: 'go.sum',
   cargo: 'Cargo.lock',
+  rubygems: 'Gemfile.lock',
 };
 
 /** Go / Rust は静的リンクが既定 */
@@ -32,6 +34,7 @@ export const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
   pypi: 'dynamic',
   go: 'static',
   cargo: 'static',
+  rubygems: 'dynamic',
 };
 
 export interface PackagePageInput {

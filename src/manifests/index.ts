@@ -7,6 +7,7 @@ import { isCargoToml, parseCargoToml } from './cargo-toml';
 import { isPyprojectToml, parsePyprojectToml } from './pyproject';
 import { isGoSum, parseGoSum } from './go-sum';
 import { isRequirementsTxt, parseRequirementsTxt } from './pypi';
+import { isGemfileLock, parseGemfileLock } from './gemfile-lock';
 import { parseGoMod } from './gomod';
 import type { Dependency, Ecosystem } from '../types';
 
@@ -56,6 +57,7 @@ export const LOCKFILE_NAME: Record<Ecosystem, string> = {
   pypi: 'poetry.lock',
   go: 'go.sum',
   cargo: 'Cargo.lock',
+  rubygems: 'Gemfile.lock',
 };
 
 /**
@@ -100,6 +102,15 @@ export function detectAndParse(content: string): ParsedManifest {
     result = { ecosystem: 'npm', dependencies: parsePnpmLock(trimmed), transitive: true };
   } else if (isYarnLock(trimmed)) {
     result = { ecosystem: 'npm', dependencies: parseYarnLock(trimmed), transitive: true };
+  } else if (isGemfileLock(trimmed)) {
+    // **requirements.txt の判定より前に置くこと。** Gemfile.lock は
+    // 行頭の語がそのまま名前に見えるので、後ろに置くと以前と同じく
+    // `GEM` `PLATFORMS` という PyPI パッケージのレポートが返る
+    result = {
+      ecosystem: 'rubygems',
+      dependencies: parseGemfileLock(trimmed),
+      transitive: true,
+    };
   } else if (isRequirementsTxt(trimmed)) {
     // requirements.txt は pip freeze なら実質完全だが、内容からは区別できない。
     // 分からないときは「見えていない依存があるかもしれない」側に倒す
@@ -110,13 +121,13 @@ export function detectAndParse(content: string): ParsedManifest {
     // build.gradle を貼ると行頭の語がパッケージ名になり、何も検査できて
     // いないのに普通のレポートが返っていた。分からないなら分からないと言う
     throw new Error(
-      'This does not look like any supported manifest or lockfile. Supported: package.json, package-lock.json, pnpm-lock.yaml, yarn.lock, requirements.txt, pyproject.toml, poetry.lock, go.mod, go.sum, Cargo.toml, Cargo.lock.',
+      'This does not look like any supported manifest or lockfile. Supported: package.json, package-lock.json, pnpm-lock.yaml, yarn.lock, requirements.txt, pyproject.toml, poetry.lock, go.mod, go.sum, Cargo.toml, Cargo.lock, Gemfile.lock.',
     );
   }
 
   if (result.dependencies.length === 0) {
     throw new Error(
-      'No dependencies were found. Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock) or a manifest (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml).',
+      'No dependencies were found. Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, Gemfile.lock) or a manifest (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml).',
     );
   }
 

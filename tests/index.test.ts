@@ -93,9 +93,11 @@ describe('app', () => {
   });
 
   it('POST /api/scan は対応外の形式を依存として読まず 400 を返す', async () => {
-    // Gemfile.lock を requirements.txt として読んでいた時期があり、
-    // `GEM` `PLATFORMS` `DEPENDENCIES` を「パッケージ」としたレポートを
-    // 200 で返していた。何も検査できていないなら 200 を返さないこと
+    // かつては判定に落ちた入力を全部 requirements.txt として読んでいた。
+    // Gemfile.lock からは `GEM` `PLATFORMS` が「パッケージ」として出てきて、
+    // 200 で普通のレポートが返っていた（Gemfile.lock 自体は今は本当に読める）。
+    // **何も検査できていないなら 200 を返さないこと。** build.gradle は
+    // 今も未対応なので、その保証はこちらで見張る
     const { env } = fakeEnv();
     const res = await app.request(
       '/api/scan',
@@ -103,7 +105,8 @@ describe('app', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          content: 'GEM\n  remote: https://rubygems.org/\n  specs:\n    rails (7.1.3)\n',
+          content:
+            "dependencies {\n    implementation 'com.squareup.okhttp3:okhttp:4.12.0'\n}\n",
           distributionModel: 'saas',
         }),
       },

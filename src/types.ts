@@ -1,10 +1,10 @@
-export type Ecosystem = 'npm' | 'pypi' | 'go' | 'cargo';
+export type Ecosystem = 'npm' | 'pypi' | 'go' | 'cargo' | 'rubygems';
 
 /**
  * 実行時に文字列を Ecosystem として受け取ってよいか確かめるための一覧。
  * 型は消えるので、外から来た値（経路の一部、DB の列）には必ずこれを通す。
  */
-export const ECOSYSTEMS: readonly Ecosystem[] = ['npm', 'pypi', 'go', 'cargo'];
+export const ECOSYSTEMS: readonly Ecosystem[] = ['npm', 'pypi', 'go', 'cargo', 'rubygems'];
 
 export type Scope = 'runtime' | 'dev' | 'build' | 'test' | 'optional';
 

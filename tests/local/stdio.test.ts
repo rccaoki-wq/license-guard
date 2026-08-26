@@ -4,7 +4,7 @@ import type { Dependency } from '../../src/types';
 
 const fetchers = (map: Record<string, string | null>) => {
   const look = async (n: string) => ({ spdx: map[n] ?? null });
-  return { npm: look, pypi: look, go: look, cargo: look };
+  return { npm: look, pypi: look, go: look, cargo: look, rubygems: look };
 };
 
 const dep = (over: Partial<Dependency> = {}): Dependency => ({

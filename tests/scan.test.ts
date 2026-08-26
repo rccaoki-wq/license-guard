@@ -13,7 +13,7 @@ function noopCache(): CacheLike {
 
 const fetchers = (map: Record<string, string | null>) => {
   const look = async (n: string) => ({ spdx: map[n] ?? null });
-  return { npm: look, pypi: look, go: look, cargo: look };
+  return { npm: look, pypi: look, go: look, cargo: look, rubygems: look };
 };
 
 describe('scan', () => {
@@ -156,7 +156,7 @@ describe('scan の時間予算', () => {
       await new Promise((r) => setTimeout(r, delayMs));
       return { spdx: 'MIT' };
     };
-    return { npm: look, pypi: look, go: look, cargo: look };
+    return { npm: look, pypi: look, go: look, cargo: look, rubygems: look };
   };
 
   const manyDeps = (n: number) =>

@@ -32,6 +32,7 @@ const ctx = {
     pypi: async () => ({ spdx: 'AGPL-3.0-only' }),
     go: async () => ({ spdx: null }),
     cargo: async () => ({ spdx: null }),
+    rubygems: async () => ({ spdx: null }),
   },
 };
 

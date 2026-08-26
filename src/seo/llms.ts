@@ -45,7 +45,7 @@ manifests; code fragments copied into a project's own source are not detected.
 - Lockfiles are the right input: problematic licenses usually arrive as transitive
   dependencies rather than ones you added directly, and only a lockfile reveals those.
   Accepted: package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, pyproject.toml,
-  uv.lock, plus the plain manifests.
+  uv.lock, Gemfile.lock, plus the plain manifests.
 
 ## Reference pages
 

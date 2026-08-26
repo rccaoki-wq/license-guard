@@ -142,6 +142,7 @@ describe('上限超過時のふるまい（scan 経由）', () => {
     pypi: async () => ({ spdx: null }),
     go: async () => ({ spdx: null }),
     cargo: async () => ({ spdx: null }),
+    rubygems: async () => ({ spdx: null }),
   };
 
   it('拒否せず部分的な結果を返す', async () => {

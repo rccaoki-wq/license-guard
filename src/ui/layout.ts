@@ -188,7 +188,7 @@ export function softwareAppJsonLd(): string {
       'Checks whether the licenses of your dependencies create obligations for the way you actually ship software — hosted SaaS, distributed binary, customer delivery, internal use, or published library.',
     featureList: [
       'Evaluates license obligations per distribution model, not per license name',
-      'Reads package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock',
+      'Reads package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, Gemfile.lock',
       'Separates build-time dependencies from shipped ones',
       'Available as an MCP server for AI agents',
     ],

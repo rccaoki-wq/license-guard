@@ -259,7 +259,7 @@ export function renderPage(): string {
 <p class="hint">The same license produces different obligations for each of these. Most scanners ignore the distinction.</p>
 
 <label for="content">Manifest</label>
-<textarea id="content" placeholder="Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock) or a manifest (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml)"></textarea>
+<textarea id="content" placeholder="Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, Gemfile.lock) or a manifest (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml)"></textarea>
 <p class="hint"><strong>Paste a lockfile if you have one.</strong> It covers transitive dependencies — where problematic licenses usually arrive — and carries exact versions. npm, PyPI, Go, and Rust are supported. What you paste is not stored. Names that resolve to a public-registry license are cached as name&nbsp;→&nbsp;license, with no record of who asked; names that do not resolve — which is what an internal package looks like — are never written.</p>
 
 <p style="margin-top:18px"><button class="btn" id="run">Check licenses</button>

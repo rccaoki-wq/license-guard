@@ -12,24 +12,13 @@ import { isRequirementsTxt } from '../../src/manifests/pypi';
  * なっていた。**利用者には自分の Ruby プロジェクトが検査されたように見える。**
  *
  * 何も検査できていないなら、それを言うこと。
+ *
+ * **Gemfile.lock は今は本当に読める**（rubygems 対応）。だが守るべき保証は
+ * 「拒否すること」ではなく「PyPI として誤読しないこと」だったので、
+ * 拒否ではなく**正しい方の答えを名指しで主張する**形で下に残してある。
  */
 describe('対応していない形式を黙って読まない', () => {
   const FOREIGN: Array<[string, string]> = [
-    [
-      'Gemfile.lock',
-      `GEM
-  remote: https://rubygems.org/
-  specs:
-    rails (7.1.3)
-    nokogiri (1.16.0)
-
-PLATFORMS
-  ruby
-
-DEPENDENCIES
-  rails (~> 7.1)
-`,
-    ],
     [
       'build.gradle',
       `dependencies {
@@ -67,6 +56,36 @@ flask = ">=2.0"
     expect(() => detectAndParse('Hello, this is my project.\n')).toThrow(
       /does not look like/i,
     );
+  });
+});
+
+describe('Gemfile.lock を PyPI として読まない', () => {
+  const GEMFILE_LOCK = `GEM
+  remote: https://rubygems.org/
+  specs:
+    rails (7.1.3)
+    nokogiri (1.16.0)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  rails (~> 7.1)
+`;
+
+  it('rubygems として読む', () => {
+    const r = detectAndParse(GEMFILE_LOCK);
+    expect(r.ecosystem).toBe('rubygems');
+    expect(r.dependencies.map((d) => d.name).sort()).toEqual(['nokogiri', 'rails']);
+  });
+
+  // 誤読の痕跡そのもの。節の見出しが「パッケージ」として出てきたら
+  // また requirements.txt 側に落ちている
+  it('節の見出しをパッケージとして拾わない', () => {
+    const names = new Set(detectAndParse(GEMFILE_LOCK).dependencies.map((d) => d.name));
+    for (const header of ['GEM', 'PLATFORMS', 'DEPENDENCIES', 'specs', 'remote']) {
+      expect(names.has(header), header).toBe(false);
+    }
   });
 });
 

@@ -26,7 +26,7 @@ const cache: CacheLike = {
 };
 
 const look = async () => ({ spdx: null });
-const ctx = { cache, fetchers: { npm: look, pypi: look, go: look, cargo: look } };
+const ctx = { cache, fetchers: { npm: look, pypi: look, go: look, cargo: look, rubygems: look } };
 
 function post(body: unknown) {
   return new Request('https://license-guard.rcc-aoki.workers.dev/mcp', {

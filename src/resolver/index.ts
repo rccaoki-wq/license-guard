@@ -2,6 +2,7 @@ import { fetchNpmLicense } from './npm';
 import { fetchPypiLicense } from './pypi';
 import { fetchGoLicenseWithFallback } from './go';
 import { fetchCratesLicense } from './crates';
+import { fetchRubygemsLicense } from './rubygems';
 import type { Dependency, Ecosystem, ResolvedFrom } from '../types';
 
 export interface Resolution {
@@ -39,6 +40,7 @@ export interface Fetchers {
   pypi: Fetcher;
   go: Fetcher;
   cargo: Fetcher;
+  rubygems: Fetcher;
 }
 
 export const defaultFetchers: Fetchers = {
@@ -46,6 +48,7 @@ export const defaultFetchers: Fetchers = {
   pypi: (n, v) => fetchPypiLicense(n, v),
   go: (n, v) => fetchGoLicenseWithFallback(n, v),
   cargo: (n, v) => fetchCratesLicense(n, v),
+  rubygems: (n, v) => fetchRubygemsLicense(n, v),
 };
 
 /** エコシステムごとの解決出典（固定版から採れた場合） */
@@ -54,6 +57,7 @@ const SOURCE: Record<Ecosystem, ResolvedFrom> = {
   pypi: 'registry',
   go: 'clearlydefined',
   cargo: 'registry',
+  rubygems: 'registry',
 };
 
 /**

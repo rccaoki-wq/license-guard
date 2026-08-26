@@ -75,7 +75,8 @@ function auditProject(args: Record<string, unknown>) {
 Work in this order.
 
 1. Look for a lockfile first, in this order of preference:
-   package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, uv.lock.
+   package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, uv.lock,
+   Gemfile.lock.
    Use a lockfile if one exists. Problem licenses usually arrive as a dependency of a
    dependency rather than one that was added on purpose, and only a lockfile shows those.
    Fall back to package.json, requirements.txt, pyproject.toml, go.mod or Cargo.toml
