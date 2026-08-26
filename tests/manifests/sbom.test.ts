@@ -228,6 +228,61 @@ describe('CycloneDX', () => {
     expect(parseCycloneDx(JSON.parse(cdx({ components: 'not an array' }))).dependencies).toEqual([]);
     expect(parseCycloneDx(JSON.parse(cdx({ components: [null, 3, []] }))).dependencies).toEqual([]);
   });
+
+  /**
+   * GitHub の dependency-graph は範囲を purl と `version` の**両方**に
+   * 入れてくる。purl 側だけ直しても文書側から入り直すので、両方を見る
+   */
+  it('purl 側でも文書側でも、範囲は版として採らない', () => {
+    const { dependencies, ranged } = parseCycloneDx(
+      JSON.parse(
+        cdx({
+          components: [
+            { purl: 'pkg:npm/a@%5E2.0.0', version: '^2.0.0' },
+            { purl: 'pkg:npm/b', version: '~1.2.3' },
+            { purl: 'pkg:npm/c', version: '3.0.0' },
+            { purl: 'pkg:npm/d@4.0.0', version: '^4.0.0' },
+          ],
+        }),
+      ),
+    );
+    expect(dependencies.map((d) => [d.name, d.version])).toEqual([
+      ['a', null],
+      ['b', null],
+      ['c', '3.0.0'],
+      ['d', '4.0.0'],
+    ]);
+    expect(ranged).toBe(2);
+  });
+
+  /**
+   * **件数と重複排除は同じ鍵で数えること。** 別々に数えると
+   * 「44 件中 63 件」のような、全体より大きい部分集合が印字される。
+   * 同じ package が版違いの範囲で何度も現れるのは実測で普通
+   */
+  it('範囲の件数が総数を超えない（重複排除と同じ鍵で数える）', () => {
+    const { dependencies, ranged } = parseCycloneDx(
+      JSON.parse(
+        cdx({
+          components: [
+            { purl: 'pkg:npm/a@%5E1.0.0' },
+            { purl: 'pkg:npm/a@%5E2.0.0' },
+            { purl: 'pkg:npm/a@%3E%3D3' },
+          ],
+        }),
+      ),
+    );
+    expect(dependencies).toHaveLength(1);
+    expect(ranged).toBe(1);
+    expect(ranged).toBeLessThanOrEqual(dependencies.length);
+  });
+
+  it('範囲が無ければ 0 件', () => {
+    const { ranged } = parseCycloneDx(
+      JSON.parse(cdx({ components: [{ purl: 'pkg:npm/a@1.0.0', version: '1.0.0' }] })),
+    );
+    expect(ranged).toBe(0);
+  });
 });
 
 describe('SPDX (JSON)', () => {
@@ -362,6 +417,31 @@ describe('SPDX (JSON)', () => {
     expect(parseSpdxJson(JSON.parse(spdx({ packages: 'nope' }))).dependencies).toEqual([]);
     expect(parseSpdxJson(JSON.parse(spdx({ packages: [null, 7] }))).dependencies).toEqual([]);
   });
+
+  /** GitHub は範囲を purl と `versionInfo` の両方に入れてくる */
+  it('versionInfo の範囲も版として採らない', () => {
+    const { dependencies, ranged } = parseSpdxJson(
+      JSON.parse(
+        spdx({
+          packages: [
+            {
+              SPDXID: 'SPDXRef-a',
+              versionInfo: '^2.0.0',
+              externalRefs: [{ referenceType: 'purl', referenceLocator: 'pkg:npm/a@%5E2.0.0' }],
+            },
+            {
+              SPDXID: 'SPDXRef-b',
+              versionInfo: '2.31.0',
+              externalRefs: [{ referenceType: 'purl', referenceLocator: 'pkg:pypi/b' }],
+            },
+          ],
+        }),
+      ),
+    );
+    expect(byName(dependencies, 'a')?.version).toBeNull();
+    expect(byName(dependencies, 'b')?.version).toBe('2.31.0');
+    expect(ranged).toBe(1);
+  });
 });
 
 describe('detectAndParse による取り込み', () => {
@@ -464,5 +544,76 @@ describe('detectAndParse による取り込み', () => {
       }),
     );
     expect(parsed.format).toBe('CycloneDX');
+  });
+
+  /**
+   * GitHub の SBOM API は文書を `{"sbom": …}` で包んで返す。
+   * **これが SBOM を手に入れる一番ありふれた経路。** 包みのまま貼られると
+   * 外側に bomFormat も spdxVersion も無いので、package.json の受け皿に
+   * 落ちて「依存が見つかりません」になる
+   */
+  it('GitHub の {"sbom": …} 包みを剥がす', () => {
+    for (const inner of [
+      cdx({ components: [{ purl: 'pkg:npm/a@1.0.0' }] }),
+      spdx({
+        packages: [
+          {
+            SPDXID: 'SPDXRef-a',
+            externalRefs: [{ referenceType: 'purl', referenceLocator: 'pkg:npm/a@1.0.0' }],
+          },
+        ],
+      }),
+    ]) {
+      const parsed = detectAndParse(JSON.stringify({ sbom: JSON.parse(inner) }));
+      expect(parsed.format === 'CycloneDX' || parsed.format === 'SPDX').toBe(true);
+      expect(parsed.dependencies.map((d) => d.name)).toEqual(['a']);
+    }
+  });
+
+  /**
+   * 剥がす条件は**中身が自分で形式を名乗っていること**だけ。
+   * `sbom` という名前の欄があるかどうかではない——package.json の
+   * 依存に `sbom` という名前の package があるのは普通のこと
+   */
+  it('`sbom` という名前の依存を持つ package.json を剥がさない', () => {
+    const parsed = detectAndParse(
+      JSON.stringify({ name: 'app', dependencies: { sbom: '^1.0.0', lodash: '4.17.21' } }),
+    );
+    expect(parsed.format).toBeUndefined();
+    expect(parsed.dependencies.map((d) => d.name).sort()).toEqual(['lodash', 'sbom']);
+  });
+
+  /**
+   * 版が固定されていないと報告の版欄が一面空になる。
+   * **空欄は不具合と区別がつかない**ので、理由を言う
+   */
+  it('版が範囲だったことを件数で開示する', () => {
+    const parsed = detectAndParse(
+      cdx({
+        components: [
+          { purl: 'pkg:npm/a@%5E2.0.0' },
+          { purl: 'pkg:npm/b@%5E1.0.0' },
+          { purl: 'pkg:npm/c@3.0.0' },
+        ],
+      }),
+    );
+    const note = parsed.notes?.find((n) => n.includes('version range'));
+    expect(note).toContain('2 of 3 components in this document record');
+    expect(note).toContain('those versions are not shown');
+    expect(note).not.toContain('records a version range');
+  });
+
+  it('全件が範囲なら「すべて」と書く', () => {
+    const parsed = detectAndParse(
+      cdx({ components: [{ purl: 'pkg:npm/a@%5E2.0.0' }, { purl: 'pkg:npm/b@%5E1.0.0' }] }),
+    );
+    const note = parsed.notes?.find((n) => n.includes('version range'));
+    expect(note).toContain('Every component in this document records');
+    expect(note).toContain('no version is shown');
+  });
+
+  it('版が固定されていれば範囲の注記は出ない', () => {
+    const parsed = detectAndParse(cdx({ components: [{ purl: 'pkg:npm/a@1.0.0' }] }));
+    expect(parsed.notes?.some((n) => n.includes('version range'))).toBe(false);
   });
 });

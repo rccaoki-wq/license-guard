@@ -1,7 +1,7 @@
 import parse from 'spdx-expression-parse';
 import { normalizeExpressionOperands, normalizeLicenseString } from '../policy/normalize';
 import { isSafePackageName } from './name-safety';
-import { parsePurl, purlType } from './purl';
+import { isVersionRange, parsePurl, purlType, type ParsedPurl } from './purl';
 import type { Dependency, Scope } from '../types';
 
 /**
@@ -28,6 +28,14 @@ export interface SbomParse {
    * 返り、検査が済んだ顔で何も見ていないことになる。
    */
   skipped: Map<string, number>;
+  /**
+   * 版の位置に範囲が書かれていた成分の件数。
+   *
+   * 版として使えないので依存側は版なしになる。**報告の版欄が
+   * 一面空になる**ので、理由を言わないと壊れて見える。
+   * 実測では GitHub の SBOM がこの形（express 36/36, tokio 63/63）。
+   */
+  ranged: number;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -128,10 +136,27 @@ function flattenComponents(list: unknown, out: Record<string, unknown>[]): void 
   }
 }
 
+/**
+ * 版を 1 点に決める。範囲しか無ければ null を返し、範囲だったことを伝える。
+ *
+ * purl の版欄と、文書側の版欄（CycloneDX の `version`、SPDX の
+ * `versionInfo`）の**両方**を見る。GitHub の SPDX は両方に `^2.0.0` を
+ * 入れてくるので、purl 側だけ直しても文書側から範囲が入り直す
+ */
+function pinned(coords: ParsedPurl, declared: string | null): [string | null, boolean] {
+  if (coords.version !== null) return [coords.version, false];
+
+  const raw = declared?.trim() || null;
+  if (raw !== null && !isVersionRange(raw)) return [raw, false];
+
+  return [null, coords.range !== null || raw !== null];
+}
+
 export function parseCycloneDx(doc: unknown): SbomParse {
   const dependencies: Dependency[] = [];
   const skipped = new Map<string, number>();
-  if (!isRecord(doc)) return { dependencies, skipped };
+  const ranged = new Set<string>();
+  if (!isRecord(doc)) return { dependencies, skipped, ranged: 0 };
 
   const components: Record<string, unknown>[] = [];
   flattenComponents(doc['components'], components);
@@ -161,18 +186,21 @@ export function parseCycloneDx(doc: unknown): SbomParse {
     }
     if (!isSafePackageName(coords.name)) continue;
 
-    dependencies.push({
+    const [version, wasRange] = pinned(coords, str(c['version']));
+    const dep: Dependency = {
       ecosystem: coords.ecosystem,
       name: coords.name,
-      version: coords.version ?? str(c['version']),
+      version,
       scope: CDX_SCOPE[str(c['scope'])?.toLowerCase() ?? 'required'] ?? 'runtime',
       origin: 'registry',
       declaredLicense: cdxLicense(c['licenses']),
       declaredFrom: 'sbom',
-    });
+    };
+    if (wasRange) ranged.add(coordKey(dep));
+    dependencies.push(dep);
   }
 
-  return { dependencies: dedupe(dependencies), skipped };
+  return { dependencies: dedupe(dependencies), skipped, ranged: ranged.size };
 }
 
 // ── SPDX (JSON) ────────────────────────────────────────────────────
@@ -196,10 +224,11 @@ function spdxPurl(refs: unknown): string | null {
 export function parseSpdxJson(doc: unknown): SbomParse {
   const dependencies: Dependency[] = [];
   const skipped = new Map<string, number>();
-  if (!isRecord(doc)) return { dependencies, skipped };
+  const ranged = new Set<string>();
+  if (!isRecord(doc)) return { dependencies, skipped, ranged: 0 };
 
   const packages = doc['packages'];
-  if (!Array.isArray(packages)) return { dependencies, skipped };
+  if (!Array.isArray(packages)) return { dependencies, skipped, ranged: 0 };
 
   // 文書が「これについて書いた」と名指しした対象は依存ではない。
   // 2.2 までは documentDescribes、2.3 以降は DESCRIBES 関係で表す
@@ -244,24 +273,38 @@ export function parseSpdxJson(doc: unknown): SbomParse {
     // 実際には NOASSERTION であることが多く、その場合は宣言に落ちる
     const license = usableLicense(p['licenseConcluded']) ?? usableLicense(p['licenseDeclared']);
 
-    dependencies.push({
+    const [version, wasRange] = pinned(coords, str(p['versionInfo']));
+    const dep: Dependency = {
       ecosystem: coords.ecosystem,
       name: coords.name,
-      version: coords.version ?? str(p['versionInfo']),
+      version,
       scope: 'runtime',
       origin: 'registry',
       declaredLicense: license,
       declaredFrom: 'sbom',
-    });
+    };
+    if (wasRange) ranged.add(coordKey(dep));
+    dependencies.push(dep);
   }
 
-  return { dependencies: dedupe(dependencies), skipped };
+  return { dependencies: dedupe(dependencies), skipped, ranged: ranged.size };
 }
 
 // ── 共通 ───────────────────────────────────────────────────────────
 
 function bump(counts: Map<string, number>, key: string): void {
   counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+
+/**
+ * 依存を一意にする座標。
+ *
+ * **重複排除と件数の数え上げで必ず同じ鍵を使うこと。** 別々に数えると
+ * 「44 件中 63 件」のような、全体より大きい部分集合が印字される
+ * （実測: tokio は同じ crate が版違いの範囲で何度も現れる）
+ */
+function coordKey(dep: Dependency): string {
+  return `${dep.ecosystem}|${dep.name}|${dep.version ?? ''}`;
 }
 
 /**
@@ -272,7 +315,7 @@ function bump(counts: Map<string, number>, key: string): void {
 function dedupe(dependencies: Dependency[]): Dependency[] {
   const seen = new Set<string>();
   return dependencies.filter((dep) => {
-    const key = `${dep.ecosystem}|${dep.name}|${dep.version ?? ''}`;
+    const key = coordKey(dep);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

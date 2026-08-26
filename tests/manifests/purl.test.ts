@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePurl, purlType } from '../../src/manifests/purl';
+import { isVersionRange, parsePurl, purlType } from '../../src/manifests/purl';
 
 describe('parsePurl', () => {
   it('版まで含めて読む', () => {
@@ -7,6 +7,7 @@ describe('parsePurl', () => {
       ecosystem: 'npm',
       name: 'lodash',
       version: '4.17.21',
+      range: null,
     });
   });
 
@@ -15,6 +16,7 @@ describe('parsePurl', () => {
       ecosystem: 'npm',
       name: 'lodash',
       version: null,
+      range: null,
     });
   });
 
@@ -23,6 +25,7 @@ describe('parsePurl', () => {
       ecosystem: 'npm',
       name: '@angular/core',
       version: '17.0.0',
+      range: null,
     });
   });
 
@@ -36,6 +39,7 @@ describe('parsePurl', () => {
       ecosystem: 'npm',
       name: '@angular/core',
       version: '17.0.0',
+      range: null,
     });
   });
 
@@ -48,6 +52,7 @@ describe('parsePurl', () => {
       ecosystem: 'go',
       name: 'github.com/gorilla/mux',
       version: 'v1.8.1',
+      range: null,
     });
   });
 
@@ -56,6 +61,7 @@ describe('parsePurl', () => {
       ecosystem: 'nuget',
       name: 'Newtonsoft.Json',
       version: '13.0.3',
+      range: null,
     });
   });
 
@@ -70,6 +76,28 @@ describe('parsePurl', () => {
       ecosystem: 'npm',
       name: 'lodash',
       version: '4.17.21',
+      range: null,
+    });
+  });
+
+  /**
+   * GitHub の dependency-graph はマニフェストの範囲をそのまま purl に
+   * 入れてくる。**範囲を版として通すと二重に嘘をつく**——固定版の照会が
+   * 必ず空振りして最新版に落ち、報告の版欄に `^2.0.0` と印字される。
+   * 実測では express の 36 件、tokio の 63 件すべてがこの形
+   */
+  it('版の位置に範囲が書かれていたら版として採らない', () => {
+    expect(parsePurl('pkg:npm/accepts@%5E2.0.0')).toEqual({
+      ecosystem: 'npm',
+      name: 'accepts',
+      version: null,
+      range: '^2.0.0',
+    });
+    expect(parsePurl('pkg:cargo/libc@%3E%3D%200.2.42%2C%3C%200.3.0')).toEqual({
+      ecosystem: 'cargo',
+      name: 'libc',
+      version: null,
+      range: '>= 0.2.42,< 0.3.0',
     });
   });
 
@@ -93,6 +121,33 @@ describe('parsePurl', () => {
   it('壊れた percent-encoding で例外を投げない', () => {
     expect(() => parsePurl('pkg:npm/%ZZbad@1.0.0')).not.toThrow();
     expect(parsePurl('pkg:npm/%ZZbad@1.0.0')?.name).toBe('%ZZbad');
+  });
+});
+
+describe('isVersionRange', () => {
+  /**
+   * **この向きが本番。** 六つの系の版文法はそれぞれ違うので、
+   * 「版の形か」で判定すると正しい版を弾いて静かに 1 件落とす。
+   * ここに挙げたものは全部レジストリに実在する版
+   */
+  it('実在する版を範囲と間違えない', () => {
+    for (const v of [
+      '4.17.21', // npm
+      'v1.8.1', // Go
+      '2.31.0.post1', // PyPI
+      '1.0.0-rc.1+build.5', // SemVer prerelease + build
+      '13.0.3', // NuGet
+      '1.16.0.rc1', // gem
+      '0.1.0-alpha.20260101',
+    ]) {
+      expect(isVersionRange(v)).toBe(false);
+    }
+  });
+
+  it('範囲の記号が 1 つでもあれば範囲', () => {
+    for (const r of ['^2.0.0', '~1.2.3', '>=1.0.0', '>= 0.2.42,< 0.3.0', '1.x || 2.x', '*']) {
+      expect(isVersionRange(r)).toBe(true);
+    }
   });
 });
 

@@ -170,6 +170,27 @@ function summarize(findings: Finding[]): ScanSummary {
   };
 }
 
+/**
+ * SBOM を貼った人に、ライセンスの出所を実際の内訳で伝える。
+ *
+ * 文書に書いてある値は**文書が作られた時点の記録**、照会で埋めた値は
+ * **今日のレジストリの値**。混ざっているのが普通なので、どちらか一方だと
+ * 言い切らずに件数で示す。実測: express 44 件中 8 件が文書由来、
+ * tokio は 51 件中 1 件。
+ */
+function sbomLicenseWording(findings: Finding[]): string {
+  const fromDoc = findings.filter((f) => f.resolvedFrom === 'sbom').length;
+  const tail = 'Code copied into your own source files is not detected.';
+
+  if (fromDoc === 0) {
+    return `The document recorded no licenses that could be used, so every one here was looked up in a public registry today. ${tail}`;
+  }
+  if (fromDoc === findings.length) {
+    return `Every license here was read from the document itself rather than looked up, so they are what was recorded when the document was generated — if the document is old, so are they. ${tail}`;
+  }
+  return `${fromDoc} of ${findings.length} licenses were read from the document itself, so they are what was recorded when it was generated; the rest were looked up in a public registry today. ${tail}`;
+}
+
 function limitationsFor(parsed: ParsedManifest, findings: Finding[]): string[] {
   const { ecosystem, transitive, format } = parsed;
 
@@ -187,7 +208,12 @@ function limitationsFor(parsed: ParsedManifest, findings: Finding[]): string[] {
     format !== undefined
       ? [
           `Every component in this ${format} document was checked, transitive ones included.`,
-          'Licenses were read from the document itself, not looked up fresh. They are what was recorded when the document was generated — if the document is old, so are they. Code copied into your own source files is not detected.',
+          // **どこからライセンスを採ったかは、文書ではなく結果から言う。**
+          // 「文書に書いてあった値を使いました」と一律に書いていたが、実測では
+          // GitHub の SPDX は 44 件中 8 件しかライセンスを持たず、残り 36 件は
+          // レジストリ照会で埋まっていた。文書由来だと言い切ると、貼った文書が
+          // 古いかどうかで結果の鮮度が決まるかのように読める
+          sbomLicenseWording(findings),
         ]
       : transitive
         ? [

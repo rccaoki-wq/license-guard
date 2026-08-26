@@ -69,8 +69,9 @@ export interface ParsedManifest {
   /**
    * この入力に固有の限界。パーサだけが知っていて、結果からは復元できないもの。
    *
-   * 今のところ SBOM で対応外の成分を落としたときにだけ付く。
-   * 落とした事実は依存の一覧に痕跡が残らないので、ここで運ばないと消える。
+   * 今のところ SBOM の二つ——対応外の成分を落としたこと、文書が版を
+   * 固定していなかったこと。どちらも結果の側では「無い」としか見えず、
+   * ここで運ばないと消える。
    */
   notes?: string[];
 }
@@ -85,6 +86,24 @@ export const LOCKFILE_NAME: Record<Ecosystem, string> = {
   nuget: 'packages.lock.json',
 };
 
+/**
+ * GitHub の SBOM API は文書を `{"sbom": …}` で包んで返す。
+ *
+ * **これは利用者が SBOM を手に入れる一番ありふれた経路。** 包みのまま
+ * 貼られると、外側に bomFormat も spdxVersion も無いので SBOM 判定を
+ * すり抜け、package.json の受け皿に落ちて「依存が見つかりません」に
+ * なる。持っているのが正しい SBOM なのに、対応していないと読める失敗を
+ * 返すことになる。
+ *
+ * 剥がす条件は**中身が自分で形式を名乗っていること**だけにする。
+ * `sbom` という名前の欄があるかどうかではない
+ */
+function unwrapSbom(doc: unknown): unknown {
+  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) return doc;
+  const inner = (doc as Record<string, unknown>)['sbom'];
+  return isCycloneDx(inner) || isSpdxJson(inner) ? inner : doc;
+}
+
 /** 「maven (38), deb (3)」——多い順。件数が同じなら名前順で安定させる */
 function describeSkipped(skipped: Map<string, number>): string {
   return [...skipped.entries()]
@@ -96,7 +115,7 @@ function describeSkipped(skipped: Map<string, number>): string {
 /**
  * SBOM の読み取り結果を ParsedManifest に写す。
  *
- * ここでしか分からない事実が二つある。**どちらも黙ると嘘になる。**
+ * ここでしか分からない事実が三つある。**どれも黙ると嘘になる。**
  *
  * 一つ目は混在。系が 2 つ以上あれば `mixed` と名乗る。多数派の名前を
  * 名乗ると、少数派の依存を持つ利用者に対して入力の素性を偽ることになる。
@@ -105,6 +124,11 @@ function describeSkipped(skipped: Map<string, number>): string {
  * 依存の一覧に痕跡を残さないので、件数を数えて notes に載せる。
  * 載せなければ、Maven 中心の SBOM が「npm の依存 3 件、問題なし」という
  * 検査済みの顔で返る。
+ *
+ * 三つ目は版が固定されていなかったこと。`^2.0.0` のような範囲は版では
+ * ないので落とすが、落とした結果は「版の欄が空」としか見えない。
+ * **空欄は不具合と区別がつかない。** 実測では GitHub の SBOM がこの形で、
+ * express は 36 件中 36 件、tokio は 63 件中 63 件が範囲だった。
  */
 function fromSbom(parsed: SbomParse, format: 'CycloneDX' | 'SPDX'): ParsedManifest {
   const systems = new Set(parsed.dependencies.map((d) => d.ecosystem));
@@ -114,6 +138,16 @@ function fromSbom(parsed: SbomParse, format: 'CycloneDX' | 'SPDX'): ParsedManife
     const total = [...parsed.skipped.values()].reduce((a, b) => a + b, 0);
     notes.push(
       `${total === 1 ? '1 component was' : `${total} components were`} left out because this scan does not cover ${total === 1 ? 'its package type' : 'their package types'}: ${describeSkipped(parsed.skipped)}. They are not counted anywhere in this result.`,
+    );
+  }
+
+  if (parsed.ranged > 0) {
+    const all = parsed.ranged === parsed.dependencies.length;
+    const subject = all
+      ? 'Every component in this document records'
+      : `${parsed.ranged} of ${parsed.dependencies.length} components in this document record`;
+    notes.push(
+      `${subject} a version range such as "^2.0.0" instead of the version actually in the artifact. A range is not a version, so ${all ? 'no version is' : 'those versions are not'} shown and ${all ? 'every license was' : 'their licenses were'} read from the current release rather than the one you are shipping. A bill of materials that does not pin versions cannot tell you which release you have. GitHub's dependency-graph export has this shape; a lockfile does not.`,
     );
   }
 
@@ -152,7 +186,7 @@ export function detectAndParse(content: string): ParsedManifest {
 
   if (trimmed.startsWith('{')) {
     // package-lock.json は推移的依存とライセンスの両方を持つ上位互換
-    const doc: unknown = JSON.parse(trimmed);
+    const doc: unknown = unwrapSbom(JSON.parse(trimmed));
     // **SBOM を最初に見る。** CycloneDX も SPDX も `{` で始まり、
     // `dependencies` や `packages` という欄を持ちうる。後ろに置くと
     // npm や NuGet の判定に先に捕まり、別形式として読まれる。

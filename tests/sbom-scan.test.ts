@@ -115,3 +115,60 @@ describe('SBOM のスキャン', () => {
     expect(r.summary.total).toBe(2);
   });
 });
+
+/**
+ * **ライセンスの出所は、入力ではなく結果から言う。**
+ *
+ * 「文書に書いてあった値を使いました」と一律に書いていたが、実測では
+ * GitHub の SPDX は 44 件中 8 件しかライセンスを持たず、残りはレジストリ
+ * 照会で埋まっていた。文書の古さの話をしながら、実際には今日の値を
+ * 見せていたことになる。混ざっているのが普通なので件数で示す
+ */
+describe('ライセンスの出所の書き分け', () => {
+  const resolvesAll = {
+    ...resolvesNothing,
+    npm: async () => ({ spdx: 'MIT' }),
+  };
+
+  /** a だけが文書にライセンスを持ち、b と c はレジストリで埋まる */
+  const PARTIAL = JSON.stringify({
+    bomFormat: 'CycloneDX',
+    specVersion: '1.5',
+    components: [
+      { purl: 'pkg:npm/a@1.0.0', licenses: [{ license: { id: 'MIT' } }] },
+      { purl: 'pkg:npm/b@1.0.0' },
+      { purl: 'pkg:npm/c@1.0.0' },
+    ],
+  });
+
+  const wording = (limitations: string[]) =>
+    limitations.find((l) => l.includes('Code copied into your own source files'))!;
+
+  it('混ざっていれば件数で示す', async () => {
+    const r = await scan(PARTIAL, 'saas', noopCache, resolvesAll);
+    expect(wording(r.limitations)).toContain('1 of 3 licenses were read from the document itself');
+    expect(wording(r.limitations)).toContain('the rest were looked up in a public registry today');
+  });
+
+  it('全部が文書由来なら文書の古さの話をする', async () => {
+    const r = await scan(NPM_ONLY, 'saas', noopCache, resolvesNothing);
+    expect(wording(r.limitations)).toContain('Every license here was read from the document itself');
+    expect(wording(r.limitations)).toContain('if the document is old, so are they');
+  });
+
+  /**
+   * 実測ではこれが多数派に近い（tokio は 51 件中 1 件しか文書由来が無い）。
+   * ここで「文書に書いてあった値です」と書くと、全部が嘘になる
+   */
+  it('1 件も文書由来が無ければ、文書の古さの話をしない', async () => {
+    const NO_LICENSES = JSON.stringify({
+      bomFormat: 'CycloneDX',
+      specVersion: '1.5',
+      components: [{ purl: 'pkg:npm/a@1.0.0' }, { purl: 'pkg:npm/b@1.0.0' }],
+    });
+    const r = await scan(NO_LICENSES, 'saas', noopCache, resolvesAll);
+    expect(wording(r.limitations)).toContain('The document recorded no licenses that could be used');
+    expect(wording(r.limitations)).not.toContain('read from the document itself');
+    expect(wording(r.limitations)).not.toContain('if the document is old');
+  });
+});
