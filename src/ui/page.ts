@@ -128,7 +128,7 @@ $('run').addEventListener('click', async () => {
 
     $('findings').innerHTML = data.findings.map((f) =>
       '<div class="f ' + f.verdict + '">' +
-        '<h3><a href="' + pkgHref(data.ecosystem, f.name) + '">' + esc(f.name) + '</a>' +
+        '<h3><a href="' + pkgHref(f.ecosystem, f.name) + '">' + esc(f.name) + '</a>' +
           (f.version ? '@' + esc(f.version) : '') + '</h3>' +
         '<p class="meta">' + LABEL[f.verdict] + ' &middot; ' +
           esc(f.spdxExpression || 'license unknown') + ' &middot; ' + esc(f.scope) + '</p>' +

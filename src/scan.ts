@@ -298,15 +298,17 @@ export async function scan(
         : { spdx: null, resolvedFrom: 'not-published' as const },
     );
   });
-  const linkage = DEFAULT_LINKAGE[parsed.ecosystem];
-
   const findings: Finding[] = parsed.dependencies.map((dep, i) => {
     const res = resolutions[i]!;
+    // **依存ごとの事実は依存から読む。** 一覧全体の `parsed.ecosystem` を
+    // 使っていたが、これは「入力全体がどの系か」で、依存の系とは別物。
+    // 1 ファイルに複数の系が混ざる入力（SBOM）では少数派が全部間違う
+    const linkage = DEFAULT_LINKAGE[dep.ecosystem];
     const policy =
       res.resolvedFrom === 'not-checked'
         ? NOT_CHECKED_RESULT
         : res.resolvedFrom === 'not-published'
-        ? notPublishedResult(dep.origin ?? 'workspace', parsed.ecosystem)
+        ? notPublishedResult(dep.origin ?? 'workspace', dep.ecosystem)
         : res.resolvedFrom === 'license-file'
         ? LICENSE_FILE_RESULT
         : res.resolvedFrom === 'unresolved'
