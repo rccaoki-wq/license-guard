@@ -87,13 +87,32 @@ const PUBLIC_REGISTRY: Record<Ecosystem, string> = {
   nuget: 'nuget.org',
 };
 
+/**
+ * 「これは自分のリポジトリのものだ」を、**その系の用語で**言う。
+ *
+ * 元は全系で「a workspace member of the project itself — it has no entry
+ * in the lockfile pointing at a registry」だった。二重に外れている。
+ * .csproj の `<ProjectReference>` から来た場合ロックファイルは登場しないし、
+ * .NET に workspace という概念は無い（solution と project）。
+ * 逆に Cargo では workspace member が正式な用語なので、共通の平易な文言に
+ * 揃えると今度は Rust 側の精度が落ちる。だから系ごとに持つ。
+ */
+const OWN_PROJECT: Record<Ecosystem, string> = {
+  npm: 'a workspace package in this repository',
+  pypi: 'a local path dependency in this repository',
+  go: 'a module replaced with a local path in this repository',
+  cargo: 'a workspace member of the project itself',
+  rubygems: 'a gem sourced from a local path in this repository',
+  nuget: 'another project in the same solution',
+};
+
 function notPublishedResult(
   origin: NonNullable<Dependency['origin']>,
   ecosystem: Ecosystem,
 ): PolicyResult {
   const detail =
     origin === 'workspace'
-      ? 'This is a workspace member of the project itself — it has no entry in the lockfile pointing at a registry, so there is nothing to look up. Its license is whatever your own repository states.'
+      ? `This is ${OWN_PROJECT[ecosystem]}, not something pulled from a registry, so there is nothing to look up. Its license is whatever your own repository states.`
       : origin === 'git'
       ? 'This is a git dependency. The lockfile pins it to a repository and revision, not to a published release, so no registry has license metadata for it. Check the LICENSE file at that revision.'
       : `This comes from a registry other than ${PUBLIC_REGISTRY[ecosystem]}, which this scan does not query. Check the license with whoever operates that registry.`;

@@ -64,6 +64,24 @@ describe('答えが無い理由ごとに、事実に合った文言を返す', (
   });
 });
 
+describe('自分のプロジェクトの一部だという説明は、出所の形式に依存しない', () => {
+  it('.csproj の ProjectReference に「ロックファイル」の話をしない', async () => {
+    const csproj = `<Project Sdk="Microsoft.NET.Sdk"><ItemGroup>
+      <ProjectReference Include="..\\Acme.Core\\Acme.Core.csproj" />
+    </ItemGroup></Project>`;
+    const r = await scan(csproj, 'distributed-binary', noopCache, fetchers());
+    const f = r.findings.find((x) => x.name === 'Acme.Core')!;
+
+    expect(f.origin).toBe('workspace');
+    expect(f.resolvedFrom).toBe('not-published');
+    // ここにはロックファイルが一つも登場しない。書いてある事実と違う
+    expect(f.rationale).not.toContain('lockfile');
+    // .NET に workspace という概念は無い（solution と project）
+    expect(f.rationale).not.toContain('workspace');
+    expect(f.rationale).toContain('another project in the same solution');
+  });
+});
+
 describe('私設レジストリの案内は、その系の公開レジストリを名指しする', () => {
   const CARGO = `[[package]]
 name = "internal_crate"
