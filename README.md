@@ -117,6 +117,7 @@ Ecosystems: **npm · PyPI · Go modules · crates.io · RubyGems · NuGet**
 | `packages.lock.json` | yes | yes |
 | `package.json`, `requirements.txt`, `pyproject.toml`, `go.mod`, `Cargo.toml` | direct only | yes |
 | `.csproj`, `Directory.Packages.props`, `packages.config` | direct only | yes |
+| CycloneDX (JSON), SPDX (JSON) | yes | only where the document has no license |
 
 Problem licenses usually arrive as a dependency of a dependency, not as something you added on purpose — so the lockfile path is the one that matters. `package-lock.json` v2/v3 embeds a license for every entry, which means a full transitive audit with **zero network lookups** and the exact versions that will actually be installed.
 
@@ -129,6 +130,18 @@ Git dependencies and members of the workspace being scanned are reported as `not
 This matters for more than speed. A workspace member named after a package that also exists publicly — `utils`, `core`, or anything else generic — would otherwise be resolved against that unrelated public package and reported as `allowed`, because the workspace version (`0.0.0-use.local`) matches nothing and the lookup falls back to the latest release. Marking the origin is what stops a private package from inheriting a stranger's license.
 
 Private registries are the deliberate exception. A `resolved` URL pointing somewhere other than npmjs is just as likely to be a transparent Artifactory or Nexus proxy serving the real public package, and nothing in the lockfile distinguishes the two — so those are still looked up, and still reported as `unresolved` if they fail.
+
+### SBOMs
+
+CycloneDX and SPDX are read in JSON, including GitHub's `{"sbom": …}` envelope, so the response of `gh api repos/OWNER/REPO/dependency-graph/sbom` can be pasted unmodified. A license recorded in the document is used as-is; components without one are looked up. `NOASSERTION`, `NONE`, and `LicenseRef-*` are not treated as declarations, because they are the document saying it does not know.
+
+Two things about real SBOMs are reported rather than smoothed over, because both change what the result means:
+
+**Most components carry no usable license.** Across five published GitHub SBOMs, the document supplied the license for 8 of 44 components in `expressjs/express` and 1 of 51 in `tokio-rs/tokio`. The rest were resolved against a registry today. The result states the split instead of claiming the licenses came from the document.
+
+**A version range is not a version.** GitHub's dependency-graph export writes the manifest range — `^2.0.0`, `>= 0.2.42,< 0.3.0` — into the purl *and* the version field: 36 of 44 components in `express`, 50 of 51 in `tokio`. There is no release under that string, so a scanner that passes it through resolves against the latest release while displaying a version that is not in your artifact. Ranges are not accepted as versions, and the result says how many components were affected. A lockfile does not have this problem, which is the practical reason to prefer one.
+
+Components whose `purl` type is outside the six supported ecosystems are counted and named rather than dropped — in practice the largest such bucket is `githubactions` (9 in `express`, 16 in `tokio`). A document where *nothing* is checkable is rejected with the reason, not returned as an empty clean report: `gorilla/mux`'s SBOM is 100% `githubactions` and fails this way.
 
 ## Status
 
