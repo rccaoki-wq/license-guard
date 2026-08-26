@@ -32,6 +32,19 @@ border-radius:8px;color:var(--muted);font-size:.85rem}
 .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .row input{flex:1 1 240px;max-width:320px;padding:11px 12px;border:1px solid var(--line);
 border-radius:8px;background:var(--card);color:var(--fg);font:inherit}
+.proof{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:22px 0 6px}
+.pcol{border:1px solid var(--line);border-top-width:4px;border-radius:8px;padding:14px 16px;background:var(--card)}
+.pcol.ok{border-top-color:var(--ok)}
+.pcol.bad{border-top-color:var(--bad)}
+.pcol h3{margin:0 0 2px;font-size:.95rem}
+.pcol .n{font-size:1.5rem;font-weight:700;line-height:1.2}
+.pcol.ok .n{color:var(--ok)}
+.pcol.bad .n{color:var(--bad)}
+.pcol ul{list-style:none;margin:10px 0 0;padding:0}
+.pcol li{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+padding:6px 0;border-top:1px solid var(--line);word-break:break-word}
+.pcol li b{font-weight:700}
+.pcol li span{color:var(--muted)}
 `;
 
 const SCRIPT = `
@@ -245,8 +258,48 @@ export function renderPage(): string {
   const body = `
 <style>${TOOL_STYLES}</style>
 
-<h1>Does anything you depend on obligate you?</h1>
-<p class="sub">Paste a manifest. No signup. The answer depends on how you ship your software, so tell it that first.</p>
+<h1>The same dependencies obligate you differently depending on how you ship.</h1>
+<p class="sub">Below is one real production Rails <code>Gemfile.lock</code> &mdash; 344 dependencies, not edited between the two runs.
+Only the shipping model changed.</p>
+
+<!-- **着地した訪問者に、入力の前に結論を見せる。**
+     2026-08-21 に本物/合成の分離を入れてからの 6 日間で、到達 38 件に対し
+     スキャン実行は 0 件だった。空のテキストエリアと配布形態の選択を先に置くと、
+     見知らぬ製品のためにエディタを開いてロックファイルを探す人はいない。
+     「例を見る」リンクは既にあったが、クリックを要求している時点で同じ壁で、
+     6 日間で 1 回も押されていない。だからここは静的な HTML にして、
+     JS もフェッチもクリックも待ち時間も挟まず初回描画に載せる。
+
+     数値は 2026-08-26 に本番 /api/scan で実測したもの。作り話を置くと
+     この製品が唯一持っている取り柄（義務を過少に言わないこと）が壊れる。 -->
+<div class="proof">
+  <div class="pcol ok">
+    <h3>Run it yourself</h3>
+    <p class="hint" style="margin:0">Internal use, or hosted SaaS</p>
+    <p class="n">0 dependencies</p>
+    <p class="hint" style="margin:8px 0 0">Nothing here obliges you to put <em>your own</em> code
+    under someone else's license.</p>
+  </div>
+  <div class="pcol bad">
+    <h3>Ship it to a customer</h3>
+    <p class="hint" style="margin:0">Delivered binary, or on-premise install</p>
+    <p class="n">3 dependencies</p>
+    <p class="hint" style="margin:8px 0 0">Each one obliges the work you deliver, as a whole,
+    to carry the same copyleft licence &mdash; with source.</p>
+    <ul>
+      <li><b>bundler-audit</b> 0.9.3<br><span>GPL-3.0-or-later</span></li>
+      <li><b>diff-lcs</b> 1.6.2<br><span>MIT AND Artistic-1.0-Perl AND GPL-2.0-or-later</span></li>
+      <li><b>rdoc</b> 8.0.0<br><span>Ruby AND GPL-2.0-only</span></li>
+    </ul>
+  </div>
+</div>
+<p><code>diff-lcs</code> arrives through RSpec. <code>rdoc</code> ships inside Ruby itself. Nobody chose either of them,
+and they are three lines out of 344. Ship the same tree and the count of dependencies demanding your whole work
+under their licence goes from none to three. That is what this checks &mdash; not which licences are present,
+but which ones your delivery method actually triggers.</p>
+
+<h2>Now check yours</h2>
+<p class="sub">Paste a manifest. No signup, no account. Tell it how you ship first &mdash; that is the input that decides the answer.</p>
 
 <label for="model">How do you ship this software?</label>
 <select id="model">
