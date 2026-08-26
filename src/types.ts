@@ -15,6 +15,20 @@ export const ECOSYSTEMS = ['npm', 'pypi', 'go', 'cargo', 'rubygems', 'nuget'] as
 
 export type Ecosystem = (typeof ECOSYSTEMS)[number];
 
+/**
+ * 入力**全体**がどの系かを表す値。
+ *
+ * ロックファイルとマニフェストは必ず 1 系だが、**SBOM は 1 文書に npm と
+ * PyPI と Maven が同居する。** そこで多数派の系を名乗ると、少数派の依存に
+ * ついて「これは npm のプロジェクトです」と嘘を言うことになる。
+ * 混在は混在として名乗れるようにする。
+ *
+ * **依存ごとの系は常に `Dependency.ecosystem` から読むこと。** この値は
+ * 「入力が何か」であって、個々の依存が何かではない。1 系の入力では
+ * 両者が必ず一致するので、取り違えても長らく症状が出ない。
+ */
+export type InputEcosystem = Ecosystem | 'mixed';
+
 export type Scope = 'runtime' | 'dev' | 'build' | 'test' | 'optional';
 
 export type Linkage = 'dynamic' | 'static' | 'separate-process';
@@ -60,6 +74,18 @@ export interface Dependency {
    */
   declaredLicense?: string;
   /**
+   * `declaredLicense` をどこから読んだか。既定は `'lockfile'`。
+   *
+   * ロックファイルの値はパッケージマネージャがレジストリから書いたもので、
+   * その版に実際に入る情報。SBOM の値は**その文書を作った人の主張**で、
+   * 生成した時点のまま古くなりうるし、手で書き換えられることもある。
+   * 確からしさが違うので、同じ顔で出さない。
+   *
+   * `declaredLicense` を持つ既存のパーサはすべてロックファイルなので、
+   * 省略時の既定は今のところ事実と一致している。
+   */
+  declaredFrom?: Extract<ResolvedFrom, 'lockfile' | 'sbom'>;
+  /**
    * その依存がどこから来るか。**公開レジストリを引く意味があるかを決める。**
    *
    * ロックファイルによっては出所が書いてある（Cargo.lock の `source` 行）。
@@ -104,6 +130,15 @@ export interface PolicyResult {
 export type ResolvedFrom =
   /** ロックファイルに記録されていた値。実際に導入される版の情報で最も確か */
   | 'lockfile'
+  /**
+   * 貼られた SBOM（CycloneDX / SPDX）に書いてあった値。
+   *
+   * `lockfile` と混ぜてはいけない。あちらはパッケージマネージャが
+   * レジストリから書いた、その版に実際に入る情報。こちらは文書を作った
+   * 人の主張で、生成時点のまま古くなりうる。判定は同じでも、
+   * 「どれくらい確からしいか」が違う。
+   */
+  | 'sbom'
   | 'registry'
   | 'registry-latest'
   /** deps.dev (Google Open Source Insights)。Go の主たる出典 */
@@ -155,7 +190,11 @@ export interface ScanSummary {
 }
 
 export interface ScanResult {
-  ecosystem: Ecosystem;
+  /**
+   * **入力全体**の系。SBOM は複数系を含みうるので `'mixed'` になる。
+   * 依存ごとの系は `findings[].ecosystem` を見ること
+   */
+  ecosystem: InputEcosystem;
   distributionModel: DistributionModel;
   findings: Finding[];
   summary: ScanSummary;

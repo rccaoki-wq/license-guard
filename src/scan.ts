@@ -1,4 +1,4 @@
-import { detectAndParse, LOCKFILE_NAME, MAX_LOOKUPS } from './manifests';
+import { detectAndParse, LOCKFILE_NAME, MAX_LOOKUPS, type ParsedManifest } from './manifests';
 import { LicenseResolver, defaultFetchers } from './resolver';
 import type { CacheLike, Fetchers } from './resolver';
 import { evaluateExpression } from './policy/engine';
@@ -170,21 +170,41 @@ function summarize(findings: Finding[]): ScanSummary {
   };
 }
 
-function limitationsFor(ecosystem: Ecosystem, findings: Finding[], transitive: boolean): string[] {
+function limitationsFor(parsed: ParsedManifest, findings: Finding[]): string[] {
+  const { ecosystem, transitive, format } = parsed;
+
   // 推移的依存まで見えたかは**どのパーサを通ったか**でしか決まらない。
   // かつて Finding の `resolvedFrom` で判定しており、npm はロックファイルに
   // ライセンスを書かないため常に false になって、ロックファイルを貼った人に
   // 「ロックファイルを貼れ」と返していた。助言するファイル名もエコシステムに
   // 合わせる（requirements.txt の利用者に package-lock.json を勧めない）
-  const out = transitive
-    ? [
-        'Transitive dependencies are included, read from the lockfile with the exact versions that will be installed.',
-        'Results are based on license metadata recorded in the lockfile. Code copied into your own source files is not detected.',
-      ]
-    : [
-        `Only direct dependencies were checked. Transitive dependencies are not included — send a ${LOCKFILE_NAME[ecosystem]} to cover those.`,
-        'Results are based on license metadata declared in the manifest. Code copied into your own source files is not detected.',
-      ];
+  //
+  // SBOM は三つ目の場合。`transitive` は true だが**ロックファイルではない**
+  // ——版もライセンスも「文書が作られた時点の記録」で、これから install
+  // される版ではない。ロックファイル用の文をそのまま出すと、古い BOM を
+  // 貼った利用者に「今入る版を見た」と言うことになる
+  const out =
+    format !== undefined
+      ? [
+          `Every component in this ${format} document was checked, transitive ones included.`,
+          'Licenses were read from the document itself, not looked up fresh. They are what was recorded when the document was generated — if the document is old, so are they. Code copied into your own source files is not detected.',
+        ]
+      : transitive
+        ? [
+            'Transitive dependencies are included, read from the lockfile with the exact versions that will be installed.',
+            'Results are based on license metadata recorded in the lockfile. Code copied into your own source files is not detected.',
+          ]
+        : [
+            // `ecosystem` が 'mixed' になるのは SBOM だけで、SBOM は必ず
+            // transitive。それでも型として塞いでおく——将来この不変が
+            // 崩れたときに、静かに `undefined` を印字させないため
+            `Only direct dependencies were checked. Transitive dependencies are not included — send a ${ecosystem === 'mixed' ? 'lockfile' : LOCKFILE_NAME[ecosystem]} to cover those.`,
+            'Results are based on license metadata declared in the manifest. Code copied into your own source files is not detected.',
+          ];
+
+  // パーサだけが知っている限界（対応外の成分を落とした件数など）。
+  // 依存の一覧に痕跡が残らないので、ここで載せないと消える
+  out.push(...(parsed.notes ?? []));
 
   /**
    * 件数と動詞を揃える。「1 dependencies are」は、書いてある内容まで
@@ -194,10 +214,13 @@ function limitationsFor(ecosystem: Ecosystem, findings: Finding[], transitive: b
   const count = (n: number, singular: string, plural: string) =>
     n === 1 ? `1 dependency ${singular}` : `${n} dependencies ${plural}`;
 
-  if (ecosystem === 'go' || ecosystem === 'cargo') {
-    const label = ecosystem === 'go' ? 'Go modules' : 'Rust crates';
-    out.push(`${label} were evaluated assuming static linking.`);
-  }
+  // **入力全体の系ではなく、実際に出てきた依存から言う。** 1 系の入力なら
+  // 結果は同じだが、SBOM は npm と Go が同居しうる。入力側で判定すると、
+  // 'mixed' のときに静的リンクの断りが丸ごと消える——Go のモジュールが
+  // 混ざっているのに、その前提を一言も言わないまま判定を出すことになる
+  const systems = new Set(findings.map((f) => f.ecosystem));
+  if (systems.has('go')) out.push('Go modules were evaluated assuming static linking.');
+  if (systems.has('cargo')) out.push('Rust crates were evaluated assuming static linking.');
 
   // 再ライセンス（Grafana の Apache-2.0 から AGPL-3.0 など）は実際に起きるので、
   // 最新版で判定したものがあることを黙っておくのは不誠実になる。
@@ -341,6 +364,6 @@ export async function scan(
     distributionModel,
     findings,
     summary: summarize(findings),
-    limitations: limitationsFor(parsed.ecosystem, findings, parsed.transitive),
+    limitations: limitationsFor(parsed, findings),
   };
 }

@@ -46,6 +46,10 @@ manifests; code fragments copied into a project's own source are not detected.
   dependencies rather than ones you added directly, and only a lockfile reveals those.
   Accepted: package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, pyproject.toml,
   uv.lock, Gemfile.lock, packages.lock.json, plus the plain manifests (.csproj included).
+- A CycloneDX or SPDX SBOM (JSON) is also accepted, and covers several ecosystems in one
+  document. Licenses written in the SBOM are used as-is rather than looked up, so the answer
+  is only as current as the document; components whose package type this scanner does not
+  cover (maven, deb, composer and the like) are counted and reported, never silently dropped.
 
 ## Reference pages
 

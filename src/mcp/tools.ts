@@ -153,7 +153,7 @@ export const TOOL_DEFINITIONS = [
         content: {
           type: 'string',
           description:
-            'Full text of a lockfile or manifest. Accepted: package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, uv.lock, Gemfile.lock, packages.lock.json, package.json, requirements.txt, go.mod, Cargo.toml, .csproj, Directory.Packages.props, packages.config. The format is detected automatically. Prefer a lockfile: it covers transitive dependencies and carries exact versions. package-lock.json is best of all, since it embeds licenses and needs no registry lookups.',
+            'Full text of a lockfile, SBOM, or manifest. Accepted: package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, uv.lock, Gemfile.lock, packages.lock.json, CycloneDX (JSON), SPDX (JSON), package.json, requirements.txt, go.mod, Cargo.toml, .csproj, Directory.Packages.props, packages.config. The format is detected automatically. Prefer a lockfile: it covers transitive dependencies and carries exact versions. package-lock.json is best of all, since it embeds licenses and needs no registry lookups. An SBOM covers several ecosystems in one document, but its licenses are read from the document rather than looked up, so they are only as current as the document.',
         },
         distribution_model: {
           type: 'string',
@@ -193,7 +193,7 @@ export const TOOL_DEFINITIONS = [
               resolvedFrom: {
                 type: 'string',
                 description:
-                  'Where the license came from. "lockfile" is exact; "registry" and "deps-dev" are the pinned version as published; "registry-latest" means the pinned version could not be read and the latest release was used instead; "not-checked" means the lookup budget ran out and this dependency was never resolved; "not-published" means it is a git dependency, a member of the scanned workspace, or from a private registry, so no public registry has license data for it — re-scanning will not resolve those.',
+                  'Where the license came from. "lockfile" is exact; "sbom" means it was written in the SBOM you pasted rather than looked up, so it is only as current as that document; "registry" and "deps-dev" are the pinned version as published; "registry-latest" means the pinned version could not be read and the latest release was used instead; "not-checked" means the lookup budget ran out and this dependency was never resolved; "not-published" means it is a git dependency, a member of the scanned workspace, or from a private registry, so no public registry has license data for it — re-scanning will not resolve those.',
               },
               verdict: { type: 'string', enum: VERDICTS },
               obligations: { type: 'array', items: { type: 'string' } },
@@ -396,7 +396,11 @@ async function checkManifest(
   const notable = result.findings.filter((f) => f.verdict !== 'allowed');
 
   const lines = [
-    `Scanned ${result.summary.total} direct ${result.ecosystem} dependencies for a ${model} project.`,
+    // **「direct」と書かない。** ロックファイルや SBOM を貼れば推移的依存も
+    // 入っており、無条件に direct と名乗るのは常に嘘になりうる。何が
+    // 見えたかは Limits 行が言う。'mixed' は系の名前として印字できない
+    // ——SBOM は 1 文書に複数の系が同居するため
+    `Scanned ${result.summary.total} ${result.ecosystem === 'mixed' ? 'dependencies across several ecosystems' : `${result.ecosystem} dependencies`} for a ${model} project.`,
     `${result.summary.blocked} trigger an obligation, ${result.summary.review} need review, ${result.summary.allowed} are clear.`,
   ];
 

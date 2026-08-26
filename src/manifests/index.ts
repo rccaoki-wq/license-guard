@@ -11,7 +11,8 @@ import { isGemfileLock, parseGemfileLock } from './gemfile-lock';
 import { isNugetPackagesLock, parseNugetPackagesLock } from './nuget-lock';
 import { isNugetProject, parseNugetProject } from './nuget-project';
 import { parseGoMod } from './gomod';
-import type { Dependency, Ecosystem } from '../types';
+import { isCycloneDx, isSpdxJson, parseCycloneDx, parseSpdxJson, type SbomParse } from './sbom';
+import type { Dependency, Ecosystem, InputEcosystem } from '../types';
 
 /**
  * 上流への照会が必要な依存の上限。
@@ -40,7 +41,7 @@ import type { Dependency, Ecosystem } from '../types';
 export const MAX_LOOKUPS = 300;
 
 export interface ParsedManifest {
-  ecosystem: Ecosystem;
+  ecosystem: InputEcosystem;
   dependencies: Dependency[];
   /**
    * 推移的依存まで含んでいるか。**どのパーサを通ったかでしか決まらない。**
@@ -51,6 +52,27 @@ export interface ParsedManifest {
    * ライセンスを書かないため、ほぼ常に `registry` になる。**別の事実である。**
    */
   transitive: boolean;
+  /**
+   * SBOM から読んだ場合の、その文書の形式。ロックファイル・マニフェストでは
+   * undefined。
+   *
+   * **`transitive` では足りない。** SBOM も推移的依存まで含むが、
+   * ロックファイルとは含み方が違う。ロックファイルの版は*これから
+   * install される*版で、SBOM の版は*文書が作られた時点で成果物に
+   * 入っていた*版。同じ「全部入り」の顔で書くと嘘になる。
+   *
+   * **`notes` の有無で代用しないこと。** 対応外の成分が 1 件も無い SBOM は
+   * notes が空になりうる（`notes` は「落としたものがある」の記録であって、
+   * 「SBOM である」の記録ではない）。
+   */
+  format?: 'CycloneDX' | 'SPDX';
+  /**
+   * この入力に固有の限界。パーサだけが知っていて、結果からは復元できないもの。
+   *
+   * 今のところ SBOM で対応外の成分を落としたときにだけ付く。
+   * 落とした事実は依存の一覧に痕跡が残らないので、ここで運ばないと消える。
+   */
+  notes?: string[];
 }
 
 /** 直接依存しか見えなかったときに案内する、そのエコシステムのロックファイル */
@@ -62,6 +84,59 @@ export const LOCKFILE_NAME: Record<Ecosystem, string> = {
   rubygems: 'Gemfile.lock',
   nuget: 'packages.lock.json',
 };
+
+/** 「maven (38), deb (3)」——多い順。件数が同じなら名前順で安定させる */
+function describeSkipped(skipped: Map<string, number>): string {
+  return [...skipped.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([type, n]) => `${type} (${n})`)
+    .join(', ');
+}
+
+/**
+ * SBOM の読み取り結果を ParsedManifest に写す。
+ *
+ * ここでしか分からない事実が二つある。**どちらも黙ると嘘になる。**
+ *
+ * 一つ目は混在。系が 2 つ以上あれば `mixed` と名乗る。多数派の名前を
+ * 名乗ると、少数派の依存を持つ利用者に対して入力の素性を偽ることになる。
+ *
+ * 二つ目は落とした成分。対応外の purl type（maven, deb, composer …）は
+ * 依存の一覧に痕跡を残さないので、件数を数えて notes に載せる。
+ * 載せなければ、Maven 中心の SBOM が「npm の依存 3 件、問題なし」という
+ * 検査済みの顔で返る。
+ */
+function fromSbom(parsed: SbomParse, format: 'CycloneDX' | 'SPDX'): ParsedManifest {
+  const systems = new Set(parsed.dependencies.map((d) => d.ecosystem));
+  const notes: string[] = [];
+
+  if (parsed.skipped.size > 0) {
+    const total = [...parsed.skipped.values()].reduce((a, b) => a + b, 0);
+    notes.push(
+      `${total === 1 ? '1 component was' : `${total} components were`} left out because this scan does not cover ${total === 1 ? 'its package type' : 'their package types'}: ${describeSkipped(parsed.skipped)}. They are not counted anywhere in this result.`,
+    );
+  }
+
+  if (parsed.dependencies.length === 0) {
+    const detail =
+      parsed.skipped.size === 0
+        ? 'It lists no components.'
+        : `Every component uses a package type this scan does not cover: ${describeSkipped(parsed.skipped)}.`;
+    throw new Error(
+      `This is a ${format} document, but nothing in it can be checked. ${detail} Supported package types: npm, pypi, golang, cargo, gem, nuget.`,
+    );
+  }
+
+  const ecosystem: InputEcosystem = systems.size === 1 ? [...systems][0]! : 'mixed';
+  return {
+    ecosystem,
+    dependencies: parsed.dependencies,
+    // SBOM は成果物の目録なので、推移的依存まで含んでいる前提で書かれる
+    transitive: true,
+    format,
+    notes,
+  };
+}
 
 /**
  * 貼り付けられた内容からエコシステムを判定し、依存を抽出する。
@@ -78,19 +153,28 @@ export function detectAndParse(content: string): ParsedManifest {
   if (trimmed.startsWith('{')) {
     // package-lock.json は推移的依存とライセンスの両方を持つ上位互換
     const doc: unknown = JSON.parse(trimmed);
-    result = isPackageLock(doc)
-      ? { ecosystem: 'npm', dependencies: parsePackageLock(trimmed), transitive: true }
-      : // packages.lock.json も `{` で始まり `dependencies` を持つ。
-        // **npm の判定より後、package.json の受け皿より前。** 後ろに置くと
-        // 依存 0 件として弾かれ、NuGet の利用者には「対応していない」と
-        // 区別が付かない形で失敗する
-        isNugetPackagesLock(doc)
-        ? {
-            ecosystem: 'nuget',
-            dependencies: parseNugetPackagesLock(trimmed),
-            transitive: true,
-          }
-        : { ecosystem: 'npm', dependencies: parsePackageJson(trimmed), transitive: false };
+    // **SBOM を最初に見る。** CycloneDX も SPDX も `{` で始まり、
+    // `dependencies` や `packages` という欄を持ちうる。後ろに置くと
+    // npm や NuGet の判定に先に捕まり、別形式として読まれる。
+    // どちらも文書自身が形式を名乗る欄（bomFormat / spdxVersion）を
+    // 持っているので、判定は形ではなく宣言で行う
+    result = isCycloneDx(doc)
+      ? fromSbom(parseCycloneDx(doc), 'CycloneDX')
+      : isSpdxJson(doc)
+        ? fromSbom(parseSpdxJson(doc), 'SPDX')
+        : isPackageLock(doc)
+          ? { ecosystem: 'npm', dependencies: parsePackageLock(trimmed), transitive: true }
+          : // packages.lock.json も `{` で始まり `dependencies` を持つ。
+            // **npm の判定より後、package.json の受け皿より前。** 後ろに置くと
+            // 依存 0 件として弾かれ、NuGet の利用者には「対応していない」と
+            // 区別が付かない形で失敗する
+            isNugetPackagesLock(doc)
+            ? {
+                ecosystem: 'nuget',
+                dependencies: parseNugetPackagesLock(trimmed),
+                transitive: true,
+              }
+            : { ecosystem: 'npm', dependencies: parsePackageJson(trimmed), transitive: false };
   } else if (isNugetProject(trimmed)) {
     // XML なので他の形式と紛れない。判定は `<PackageReference>` /
     // `<PackageVersion>` / `<package id=>` の実在だけを見る。
@@ -139,13 +223,13 @@ export function detectAndParse(content: string): ParsedManifest {
     // build.gradle を貼ると行頭の語がパッケージ名になり、何も検査できて
     // いないのに普通のレポートが返っていた。分からないなら分からないと言う
     throw new Error(
-      'This does not look like any supported manifest or lockfile. Supported: package.json, package-lock.json, pnpm-lock.yaml, yarn.lock, requirements.txt, pyproject.toml, poetry.lock, go.mod, go.sum, Cargo.toml, Cargo.lock, Gemfile.lock, packages.lock.json, .csproj, Directory.Packages.props, packages.config.',
+      'This does not look like any supported manifest, lockfile, or SBOM. Supported: package.json, package-lock.json, pnpm-lock.yaml, yarn.lock, requirements.txt, pyproject.toml, poetry.lock, go.mod, go.sum, Cargo.toml, Cargo.lock, Gemfile.lock, packages.lock.json, .csproj, Directory.Packages.props, packages.config, CycloneDX (JSON), SPDX (JSON).',
     );
   }
 
   if (result.dependencies.length === 0) {
     throw new Error(
-      'No dependencies were found. Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, Gemfile.lock, packages.lock.json) or a manifest (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml, .csproj).',
+      'No dependencies were found. Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, Gemfile.lock, packages.lock.json), an SBOM (CycloneDX or SPDX, JSON), or a manifest (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml, .csproj).',
     );
   }
 

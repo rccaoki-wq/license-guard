@@ -46,11 +46,26 @@ function errorFor(content: string): string {
   }
 }
 
+/**
+ * SBOM は `LOCKFILE_NAME` に載らない——エコシステムではないから。
+ *
+ * つまり上の Record 由来の自動チェックが効かない側にいる。ロックファイルを
+ * 足したときは型が新しい値を作ってくれるが、SBOM を足しても型は何も
+ * 増えないので、掲載面が古いままでも全部緑になる。ここで名指しする。
+ */
+const SBOM_FORMATS = ['CycloneDX', 'SPDX'] as const;
+
 describe('対応形式はすべての掲載面に載る', () => {
   for (const [where, text] of surfaces()) {
     for (const lockfile of new Set(Object.values(LOCKFILE_NAME))) {
       it(`${where} に ${lockfile} が載っている`, () => {
         expect(text).toContain(lockfile);
+      });
+    }
+
+    for (const format of SBOM_FORMATS) {
+      it(`${where} に ${format} が載っている`, () => {
+        expect(text).toContain(format);
       });
     }
   }

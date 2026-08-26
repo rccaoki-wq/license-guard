@@ -77,6 +77,9 @@ Work in this order.
 1. Look for a lockfile first, in this order of preference:
    package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, uv.lock,
    Gemfile.lock, packages.lock.json.
+   A CycloneDX (JSON) or SPDX (JSON) SBOM also works, and is the only input that covers
+   several ecosystems at once — but its licenses are read from the document rather than
+   looked up, so they are only as current as the document.
    Use a lockfile if one exists. Problem licenses usually arrive as a dependency of a
    dependency rather than one that was added on purpose, and only a lockfile shows those.
    Fall back to package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml or a

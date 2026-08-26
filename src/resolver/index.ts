@@ -84,6 +84,19 @@ function withCutoff(p: Promise<Resolution>, ms: number): Promise<Resolution> {
   });
 }
 
+/**
+ * キャッシュ行の `source` 欄が名乗ってよい出所。
+ *
+ * **`ResolvedFrom` の全体ではない。** 意図的に狭い。
+ * `not-checked` `not-published` は上限や出所の都合で scan が付けるもので、
+ * 照会していない以上キャッシュには書かれない。`sbom` は貼られた文書に
+ * 書いてあった値で、これもキャッシュを経由しない。ここに足すと、
+ * 壊れた行を「引かなかった」「未公開だ」と読み替えて表示することになる。
+ *
+ * 逆に、**レジストリ照会の新しい出所を足したときはここにも足すこと。**
+ * 漏らすと、その出所でキャッシュされた行が読み出し時に系の既定へ
+ * 化ける（正しく引けているのに出所だけが嘘になる）。
+ */
 const RESOLVED_FROM_VALUES: readonly ResolvedFrom[] = [
   'lockfile',
   'registry',
@@ -127,10 +140,12 @@ export class LicenseResolver {
      */
     prefetched?: Map<string, { spdx: string | null; source: string }>,
   ): Promise<Resolution> {
-    // ロックファイルに記録された値は、実際に導入される版そのものの情報。
-    // 上流に問い合わせる理由が無く、レジストリより確かでもある。
+    // 既に書いてある値は、上流に問い合わせる理由が無い。
+    // ただし**どこに書いてあったかは保つ**——ロックファイルの値は
+    // パッケージマネージャがレジストリから書いたもので、SBOM の値は
+    // その文書を作った人の主張。確からしさが違う（types.ts の declaredFrom）
     if (dep.declaredLicense) {
-      return { spdx: dep.declaredLicense, resolvedFrom: 'lockfile' };
+      return { spdx: dep.declaredLicense, resolvedFrom: dep.declaredFrom ?? 'lockfile' };
     }
 
     // キャッシュは最適化であり、その失敗が解決処理を壊してはならない。
