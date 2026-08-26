@@ -22,6 +22,38 @@ interface CacheRow {
  */
 export const LATEST_FALLBACK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * 解決の規則を直した時刻。**ここより前に保存された答えは、直す前の規則で
+ * 得たもの**なので使わない。
+ *
+ * 不変な情報源の行は恒久に残る。つまり規則を直しても、既に保存された誤答は
+ * **永久に配り続ける**。2026-08-26、ClearlyDefined の記録から
+ * `LicenseRef-scancode-*` を落とす修正を入れて配ったのに、実在の go.mod を
+ * 流し直しても結果は 1 件も変わらなかった。誤答 22 行がキャッシュに載って
+ * いたためで、手で DELETE するまで誰にも届かなかった。
+ *
+ * **直したことを覚えている人間に依存させない。**規則を直したらここに 1 行
+ * 足す。該当する情報源の行だけが読み捨てられ、次の照会で新しい規則を通る。
+ * 情報源ごとに分けてあるのは、関係の無い行まで捨てて上流を叩き直さないため。
+ *
+ * **必要なのは期限を持たない情報源だけ。**`registry-latest` のように
+ * 7 日で切れる行は放っておいても新しい規則を通り直す。ここに足すと、
+ * 期限内かどうかの判定と二重になって読みにくくなるだけ。
+ */
+export const RULE_EPOCH_MS: Readonly<Record<string, number>> = {
+  // ClearlyDefined の記録から LicenseRef-scancode を落とすようにした。
+  // 走査器の推定であって発行者の宣言ではない（clearlydefined.ts の usableDeclared）
+  clearlydefined: Date.parse('2026-08-26T07:50:00Z'),
+};
+
+/** その行が、今の規則より前に保存されたものか */
+function isPreRuleChange(source: string, resolvedAt: number | null): boolean {
+  const epoch = RULE_EPOCH_MS[source];
+  if (epoch === undefined) return false;
+  // 時刻が無ければ前後を判定できない。判定できないものは信用しない
+  return typeof resolvedAt !== 'number' || resolvedAt < epoch;
+}
+
 /** キャッシュ表のキー。エコシステムまたぎの取り違えを防ぐ */
 export function cacheKey(ecosystem: string, name: string, version: string): string {
   return `${ecosystem}|${name}|${version}`;
@@ -73,6 +105,8 @@ export class LicenseCache {
 
     if (!row) return null;
 
+    if (isPreRuleChange(row.source, row.resolved_at)) return null;
+
     if (!isImmutableSource(row.source)) {
       // 期限を判定できない行は使わない。古い可能性を無視するより再取得する方が安全
       if (typeof row.resolved_at !== 'number') return null;
@@ -119,6 +153,7 @@ export class LicenseCache {
             .all<CacheRow & { ecosystem: string; package: string; version: string }>();
 
           for (const row of res.results ?? []) {
+            if (isPreRuleChange(row.source, row.resolved_at)) continue;
             if (!isImmutableSource(row.source)) {
               if (typeof row.resolved_at !== 'number') continue;
               if (Date.now() - row.resolved_at > LATEST_FALLBACK_TTL_MS) continue;

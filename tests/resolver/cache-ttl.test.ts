@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LicenseCache, LATEST_FALLBACK_TTL_MS } from '../../src/resolver/cache';
+import { LicenseCache, LATEST_FALLBACK_TTL_MS, RULE_EPOCH_MS } from '../../src/resolver/cache';
 import type { Dependency } from '../../src/types';
 
 function fakeDb(rows: Array<Record<string, unknown>> = []) {
@@ -48,8 +48,8 @@ describe('可変な情報源から得た結果は期限付きで扱う', () => {
     expect(await cache.get(dep)).toEqual({ spdx: 'MIT', source: 'registry' });
   });
 
-  it('clearlydefined 由来も同様に不変として扱う', async () => {
-    const cache = new LicenseCache(fakeDb([row('clearlydefined', 10 * 365 * 24 * 3600_000)]));
+  it('clearlydefined 由来も、規則を直した後に保存されたものなら不変として扱う', async () => {
+    const cache = new LicenseCache(fakeDb([row('clearlydefined', 0)]));
     expect((await cache.get(dep))?.source).toBe('clearlydefined');
   });
 
@@ -68,5 +68,69 @@ describe('可変な情報源から得た結果は期限付きで扱う', () => {
       fakeDb([{ ecosystem: 'npm', package: 'express', version: '1.0.0', spdx: 'MIT', source: 'registry-latest' }]),
     );
     expect(await cache.get(dep)).toBeNull();
+  });
+});
+
+/**
+ * **不変な情報源の行は恒久に残る。だから解決の規則を直しても、既に
+ * 保存された誤答は永久に配り続ける。**
+ *
+ * 2026-08-26 に ClearlyDefined の LicenseRef-scancode を落とす修正を
+ * 入れて配ったが、実在の go.mod を流し直しても結果は 1 件も変わらなかった。
+ * 誤答 22 行がキャッシュに載っていたためで、手で DELETE するまで
+ * 誰にも届かなかった。**直したことを覚えている人間に依存させない。**
+ */
+describe('規則を直す前に保存された答えは使わない', () => {
+  const epoch = RULE_EPOCH_MS['clearlydefined'];
+
+  it('規則を直した情報源には epoch が入っている', () => {
+    expect(typeof epoch).toBe('number');
+  });
+
+  it('epoch より前に保存された行は、不変な情報源でも無視する', async () => {
+    const cache = new LicenseCache(
+      fakeDb([{ ...row('clearlydefined', 0), resolved_at: epoch! - 1 }]),
+    );
+    expect(await cache.get(dep)).toBeNull();
+  });
+
+  it('epoch 以降に保存された行は使う', async () => {
+    const cache = new LicenseCache(
+      fakeDb([{ ...row('clearlydefined', 0), resolved_at: epoch! }]),
+    );
+    expect((await cache.get(dep))?.source).toBe('clearlydefined');
+  });
+
+  /** 時刻が無ければ epoch との前後を判定できない。判定できないものは信用しない */
+  it('resolved_at が無い行は epoch より前として扱う', async () => {
+    const cache = new LicenseCache(
+      fakeDb([
+        { ecosystem: 'npm', package: 'express', version: '1.0.0', spdx: 'MIT', source: 'clearlydefined' },
+      ]),
+    );
+    expect(await cache.get(dep)).toBeNull();
+  });
+
+  /** epoch を持たない情報源の行は、これまでどおり古くても使う */
+  it('規則を直していない情報源には影響しない', async () => {
+    const cache = new LicenseCache(fakeDb([row('registry', 10 * 365 * 24 * 3600_000)]));
+    expect((await cache.get(dep))?.source).toBe('registry');
+  });
+
+  /**
+   * epoch が要るのは**期限を持たない情報源だけ**。7 日で切れる行は
+   * 放っておいても新しい規則を通り直す。両方を掛けると、期限内かどうかの
+   * 判定と二重になって読みにくくなるだけ
+   */
+  it('期限を持つ情報源には epoch を置かない', () => {
+    expect(RULE_EPOCH_MS['registry-latest']).toBeUndefined();
+  });
+
+  /** 過去でなければ、直した後に保存された行まで捨ててしまう */
+  it('epoch は過去の時刻である', () => {
+    for (const [source, ms] of Object.entries(RULE_EPOCH_MS)) {
+      expect(Number.isFinite(ms), source).toBe(true);
+      expect(ms, source).toBeLessThan(Date.now());
+    }
   });
 });
