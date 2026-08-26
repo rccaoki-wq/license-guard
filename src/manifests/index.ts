@@ -8,6 +8,8 @@ import { isPyprojectToml, parsePyprojectToml } from './pyproject';
 import { isGoSum, parseGoSum } from './go-sum';
 import { isRequirementsTxt, parseRequirementsTxt } from './pypi';
 import { isGemfileLock, parseGemfileLock } from './gemfile-lock';
+import { isNugetPackagesLock, parseNugetPackagesLock } from './nuget-lock';
+import { isNugetProject, parseNugetProject } from './nuget-project';
 import { parseGoMod } from './gomod';
 import type { Dependency, Ecosystem } from '../types';
 
@@ -58,6 +60,7 @@ export const LOCKFILE_NAME: Record<Ecosystem, string> = {
   go: 'go.sum',
   cargo: 'Cargo.lock',
   rubygems: 'Gemfile.lock',
+  nuget: 'packages.lock.json',
 };
 
 /**
@@ -77,7 +80,22 @@ export function detectAndParse(content: string): ParsedManifest {
     const doc: unknown = JSON.parse(trimmed);
     result = isPackageLock(doc)
       ? { ecosystem: 'npm', dependencies: parsePackageLock(trimmed), transitive: true }
-      : { ecosystem: 'npm', dependencies: parsePackageJson(trimmed), transitive: false };
+      : // packages.lock.json も `{` で始まり `dependencies` を持つ。
+        // **npm の判定より後、package.json の受け皿より前。** 後ろに置くと
+        // 依存 0 件として弾かれ、NuGet の利用者には「対応していない」と
+        // 区別が付かない形で失敗する
+        isNugetPackagesLock(doc)
+        ? {
+            ecosystem: 'nuget',
+            dependencies: parseNugetPackagesLock(trimmed),
+            transitive: true,
+          }
+        : { ecosystem: 'npm', dependencies: parsePackageJson(trimmed), transitive: false };
+  } else if (isNugetProject(trimmed)) {
+    // XML なので他の形式と紛れない。判定は `<PackageReference>` /
+    // `<PackageVersion>` / `<package id=>` の実在だけを見る。
+    // .csproj は推移的依存を持たない——実際に入る版は restore が決める
+    result = { ecosystem: 'nuget', dependencies: parseNugetProject(trimmed), transitive: false };
   } else if (/^module\s+\S+/m.test(trimmed) || /^require\s*\(/m.test(trimmed)) {
     result = { ecosystem: 'go', dependencies: parseGoMod(trimmed), transitive: false };
   } else if (isGoSum(trimmed)) {
@@ -121,13 +139,13 @@ export function detectAndParse(content: string): ParsedManifest {
     // build.gradle を貼ると行頭の語がパッケージ名になり、何も検査できて
     // いないのに普通のレポートが返っていた。分からないなら分からないと言う
     throw new Error(
-      'This does not look like any supported manifest or lockfile. Supported: package.json, package-lock.json, pnpm-lock.yaml, yarn.lock, requirements.txt, pyproject.toml, poetry.lock, go.mod, go.sum, Cargo.toml, Cargo.lock, Gemfile.lock.',
+      'This does not look like any supported manifest or lockfile. Supported: package.json, package-lock.json, pnpm-lock.yaml, yarn.lock, requirements.txt, pyproject.toml, poetry.lock, go.mod, go.sum, Cargo.toml, Cargo.lock, Gemfile.lock, packages.lock.json, .csproj, Directory.Packages.props, packages.config.',
     );
   }
 
   if (result.dependencies.length === 0) {
     throw new Error(
-      'No dependencies were found. Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, Gemfile.lock) or a manifest (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml).',
+      'No dependencies were found. Paste a lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, Gemfile.lock, packages.lock.json) or a manifest (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml, .csproj).',
     );
   }
 

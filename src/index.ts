@@ -108,6 +108,8 @@ const NAME_PATTERN: Record<Ecosystem, RegExp> = {
   go: /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(\/[A-Za-z0-9._~-]+)*$/i,
   cargo: /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
   rubygems: /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
+  // NuGet の ID は英数と . _ - のみ。大文字小文字は保存されるが同一視される
+  nuget: /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
 };
 
 function isValidPackageName(ecosystem: Ecosystem, name: string): boolean {
@@ -218,6 +220,7 @@ const API_LINKAGE: Record<Ecosystem, Linkage> = {
   // gem は実行時に require される。配布物に取り込まれる Go / Rust と違い、
   // 差し替え可能な形で残るので npm / pypi と同じ扱い
   rubygems: 'dynamic',
+  nuget: 'dynamic',
 };
 
 async function packageApi(

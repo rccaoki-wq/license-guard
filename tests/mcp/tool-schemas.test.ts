@@ -33,6 +33,7 @@ const ctx = {
     go: async () => ({ spdx: null }),
     cargo: async () => ({ spdx: null }),
     rubygems: async () => ({ spdx: null }),
+    nuget: async () => ({ spdx: null }),
   },
 };
 

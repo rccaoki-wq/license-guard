@@ -3,6 +3,7 @@ import { fetchPypiLicense } from './pypi';
 import { fetchGoLicenseWithFallback } from './go';
 import { fetchCratesLicense } from './crates';
 import { fetchRubygemsLicense } from './rubygems';
+import { fetchNugetLicense } from './nuget';
 import type { Dependency, Ecosystem, ResolvedFrom } from '../types';
 
 export interface Resolution {
@@ -41,6 +42,7 @@ export interface Fetchers {
   go: Fetcher;
   cargo: Fetcher;
   rubygems: Fetcher;
+  nuget: Fetcher;
 }
 
 export const defaultFetchers: Fetchers = {
@@ -49,6 +51,7 @@ export const defaultFetchers: Fetchers = {
   go: (n, v) => fetchGoLicenseWithFallback(n, v),
   cargo: (n, v) => fetchCratesLicense(n, v),
   rubygems: (n, v) => fetchRubygemsLicense(n, v),
+  nuget: (n, v) => fetchNugetLicense(n, v),
 };
 
 /** エコシステムごとの解決出典（固定版から採れた場合） */
@@ -58,6 +61,7 @@ const SOURCE: Record<Ecosystem, ResolvedFrom> = {
   go: 'clearlydefined',
   cargo: 'registry',
   rubygems: 'registry',
+  nuget: 'registry',
 };
 
 /**
@@ -87,6 +91,7 @@ const RESOLVED_FROM_VALUES: readonly ResolvedFrom[] = [
   'deps-dev',
   'clearlydefined',
   'repo-license',
+  'license-file',
   'unresolved',
 ];
 
@@ -153,7 +158,15 @@ export class LicenseResolver {
     }
 
     if (lookup.spdx === null) {
-      return { spdx: null, resolvedFrom: 'unresolved' };
+      // 答えが無いことにも種類がある。**なぜ無いかを知っている場合は
+      // それを潰さない。** `unresolved` の文言は「どこにも宣言が無いか、
+      // 上流が返さなかった」で、ライセンス本文を同梱している
+      // パッケージ（NuGet の `<license type="file">`）に当てると嘘になる
+      // ——宣言はある。読めない形で置いてあるだけ。
+      //
+      // 引けなかった事実は保存しない。無い答えを溜めても次が速くならず、
+      // 内部パッケージ名を書き込む経路を増やすだけになる
+      return { spdx: null, resolvedFrom: lookup.source ?? 'unresolved' };
     }
 
     // fromLatest が最優先。「要求した版そのものではない」は、どの API が

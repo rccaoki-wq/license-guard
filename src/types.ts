@@ -1,10 +1,19 @@
-export type Ecosystem = 'npm' | 'pypi' | 'go' | 'cargo' | 'rubygems';
-
 /**
  * 実行時に文字列を Ecosystem として受け取ってよいか確かめるための一覧。
- * 型は消えるので、外から来た値（経路の一部、DB の列）には必ずこれを通す。
+ * 型は消えるので、外から来た値（経路の一部、DB の列、MCP の引数）には
+ * 必ずこれを通す。
+ *
+ * **union をここから導く**——逆ではない。以前は union が定義で、この配列は
+ * `readonly Ecosystem[]` と注釈した手書きの写しだった。その向きだと、
+ * union に足しても配列が古いままでも型が通る。実際 rubygems を足したとき、
+ * MCP のツールスキーマは `['npm','pypi','go','cargo']` のまま出荷され、
+ * Ruby の利用者は MCP 経由だと入口で弾かれていた。
+ *
+ * 配列を源にすれば、写しは存在しえない。
  */
-export const ECOSYSTEMS: readonly Ecosystem[] = ['npm', 'pypi', 'go', 'cargo', 'rubygems'];
+export const ECOSYSTEMS = ['npm', 'pypi', 'go', 'cargo', 'rubygems', 'nuget'] as const;
+
+export type Ecosystem = (typeof ECOSYSTEMS)[number];
 
 export type Scope = 'runtime' | 'dev' | 'build' | 'test' | 'optional';
 
@@ -114,6 +123,20 @@ export type ResolvedFrom =
    * `not-checked` とは別物 —— 上限に当たったのではなく、引く先が無い。
    */
   | 'not-published'
+  /**
+   * 発行者がライセンスを**本文ファイルとして同梱**しており、SPDX の識別子を
+   * 宣言していない（NuGet の `<license type="file">`）。
+   *
+   * `unresolved` と混ぜてはいけない。あちらの文言は「どこにも宣言が無いか、
+   * レジストリが返さなかった」で、この場合は**宣言はある**——機械では
+   * 読めない形で置いてあるだけ。混ぜると、実物を見れば分かる依存に対して
+   * 「上流が答えなかった」という嘘の説明が付く。
+   *
+   * 意味までは言えない。type="file" は非標準の条件とは限らず、実測では
+   * MIT の本文をそのまま同梱している発行者もいた（Microsoft.NET.Sdk.*）。
+   * 主張してよいのは「読めない形で宣言されている」という事実だけ。
+   */
+  | 'license-file'
   | 'unresolved';
 
 export interface Finding extends Dependency {

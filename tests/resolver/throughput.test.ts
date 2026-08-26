@@ -48,7 +48,7 @@ describe('resolveAll のスループット', () => {
     const seed = Object.fromEntries(deps.map((d) => [key(d), 'MIT']));
     const cache = countingCache(seed);
     const npm = vi.fn();
-    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn() });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn(), nuget: vi.fn() });
 
     const prefetched = await cache.getMany(deps);
     cache.calls.get = 0;
@@ -65,7 +65,7 @@ describe('resolveAll のスループット', () => {
     const deps = [dep('known'), dep('unknown')];
     const cache = countingCache({ [key(deps[0]!)]: 'MIT' });
     const npm = vi.fn(async () => ({ spdx: 'Apache-2.0' }));
-    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn() });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn(), nuget: vi.fn() });
 
     const prefetched = await cache.getMany(deps);
     const out = await r.resolveAll(deps, undefined, prefetched);
@@ -87,7 +87,7 @@ describe('resolveAll のスループット', () => {
       if (i % 16 === 0) await new Promise((r) => setTimeout(r, SLOW));
       return { spdx: 'MIT' };
     });
-    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn() });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn(), nuget: vi.fn() });
 
     const t0 = Date.now();
     const out = await r.resolveAll(deps);
@@ -107,7 +107,7 @@ describe('resolveAll のスループット', () => {
       await new Promise((r) => setTimeout(r, 60));
       return { spdx: 'MIT' };
     });
-    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn() });
+    const r = new LicenseResolver(cache, { npm, pypi: vi.fn(), go: vi.fn(), cargo: vi.fn(), rubygems: vi.fn(), nuget: vi.fn() });
 
     const out = await r.resolveAll(deps, Date.now() + 100);
 

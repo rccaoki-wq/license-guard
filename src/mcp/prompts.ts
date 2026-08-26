@@ -76,11 +76,13 @@ Work in this order.
 
 1. Look for a lockfile first, in this order of preference:
    package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, uv.lock,
-   Gemfile.lock.
+   Gemfile.lock, packages.lock.json.
    Use a lockfile if one exists. Problem licenses usually arrive as a dependency of a
    dependency rather than one that was added on purpose, and only a lockfile shows those.
-   Fall back to package.json, requirements.txt, pyproject.toml, go.mod or Cargo.toml
-   only when no lockfile is present, and say so in your answer.
+   Fall back to package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml or a
+   .csproj only when no lockfile is present, and say so in your answer. On .NET this is
+   the normal case: packages.lock.json only exists when the project opted into it with
+   RestorePackagesWithLockFile.
 
 2. Pass the full file contents to check_manifest_licenses with distribution_model
    set to "${model}". Do not summarise or trim the file first.

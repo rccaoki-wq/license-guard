@@ -49,6 +49,7 @@ describe('監査#3 照会が必要な依存数の上限', () => {
       go: async () => ({ spdx: null }),
       cargo: async () => ({ spdx: null }),
       rubygems: async () => ({ spdx: null }),
+      nuget: async () => ({ spdx: null }),
     });
     // 全件が結果に含まれ、未確認分は allowed でなく review になる
     expect(r.summary.total).toBe(MAX_LOOKUPS + 1);
@@ -134,6 +135,7 @@ describe('監査#1 最新版フォールバックの開示', () => {
     go: async () => ({ spdx: null }),
     cargo: async () => ({ spdx: null }),
     rubygems: async () => ({ spdx: null }),
+    nuget: async () => ({ spdx: null }),
   };
 
   it('判定は出しつつ、固定版由来でないことを理由文に明示する', async () => {

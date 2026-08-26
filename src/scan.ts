@@ -24,6 +24,7 @@ const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
   go: 'static',
   cargo: 'static',
   rubygems: 'dynamic',
+  nuget: 'dynamic',
 };
 
 /**
@@ -70,15 +71,54 @@ export const SCAN_BUDGET_MS = 20_000;
  * 警告全体の信頼を落とすが、allowed にすると未確認を「問題なし」と
  * 数えることになり、これは絶対に避ける。
  */
-function notPublishedResult(origin: NonNullable<Dependency['origin']>): PolicyResult {
+/**
+ * 「照会する先が公開レジストリではない」と言うには、**その系の公開
+ * レジストリの名前**が要る。ここは crates.io 決め打ちで、Cargo から
+ * 移植したときにそのまま残っていた。私設 gem サーバや社内の NuGet
+ * フィードを使っている利用者に「crates.io 以外から来ています」と
+ * 返っていた——Rust を一行も書いていない人に。
+ */
+const PUBLIC_REGISTRY: Record<Ecosystem, string> = {
+  npm: 'the public npm registry',
+  pypi: 'PyPI',
+  go: 'the public Go module proxy',
+  cargo: 'crates.io',
+  rubygems: 'RubyGems.org',
+  nuget: 'nuget.org',
+};
+
+function notPublishedResult(
+  origin: NonNullable<Dependency['origin']>,
+  ecosystem: Ecosystem,
+): PolicyResult {
   const detail =
     origin === 'workspace'
       ? 'This is a workspace member of the project itself — it has no entry in the lockfile pointing at a registry, so there is nothing to look up. Its license is whatever your own repository states.'
       : origin === 'git'
       ? 'This is a git dependency. The lockfile pins it to a repository and revision, not to a published release, so no registry has license metadata for it. Check the LICENSE file at that revision.'
-      : 'This comes from a registry other than crates.io, which this scan does not query. Check the license with whoever operates that registry.';
+      : `This comes from a registry other than ${PUBLIC_REGISTRY[ecosystem]}, which this scan does not query. Check the license with whoever operates that registry.`;
   return { verdict: 'review', obligations: [], rationale: detail };
 }
+
+/**
+ * ライセンスが**本文ファイルとして同梱**されており、識別子の宣言が無い。
+ *
+ * `UNRESOLVED_RESULT` を当ててはいけない。あちらは「どこにも宣言が無いか、
+ * 上流が返さなかった」と書いてあるが、ここでは宣言はある——機械が読めない
+ * 形で置いてあるだけで、パッケージを開けば読める。
+ *
+ * **条件の中身は言わない。** `type="file"` は非標準の条件を意味しない。
+ * 実測では MIT の本文をそのまま同梱している発行者もいた
+ * （Microsoft.NET.Workload.*）。一方で、最近有償の商用条件へ移った
+ * .NET のパッケージ（AutoMapper、FluentAssertions、MediatR）も同じ形を
+ * 取る。**どちらかは実物を見ないと分からない**ので、見に行く先だけを示す。
+ */
+const LICENSE_FILE_RESULT: PolicyResult = {
+  verdict: 'review',
+  obligations: [],
+  rationale:
+    'The publisher ships the license as a text file inside the package instead of declaring an SPDX identifier, so it cannot be read automatically. This says nothing about the terms — some packages bundle a standard open-source license this way, others use paid commercial terms. Open the package and read the bundled license file.',
+};
 
 const UNRESOLVED_RESULT: PolicyResult = {
   verdict: 'review',
@@ -247,7 +287,9 @@ export async function scan(
       res.resolvedFrom === 'not-checked'
         ? NOT_CHECKED_RESULT
         : res.resolvedFrom === 'not-published'
-        ? notPublishedResult(dep.origin ?? 'workspace')
+        ? notPublishedResult(dep.origin ?? 'workspace', parsed.ecosystem)
+        : res.resolvedFrom === 'license-file'
+        ? LICENSE_FILE_RESULT
         : res.resolvedFrom === 'unresolved'
         ? UNRESOLVED_RESULT
         : withProvenanceNote(

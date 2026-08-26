@@ -23,6 +23,7 @@ const resolvesNothing = {
   go: async () => ({ spdx: null }),
   cargo: async () => ({ spdx: null }),
   rubygems: async () => ({ spdx: null }),
+  nuget: async () => ({ spdx: null }),
 };
 
 /** workspace メンバーを 1 件だけ含む yarn.lock */

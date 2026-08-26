@@ -105,7 +105,7 @@ An agent-facing index lives at [`/llms.txt`](https://license-guard.rcc-aoki.work
 
 ## Supported manifests
 
-Ecosystems: **npm · PyPI · Go modules · crates.io**
+Ecosystems: **npm · PyPI · Go modules · crates.io · RubyGems · NuGet**
 
 | Format | Transitive deps | Registry lookups |
 |---|---|---|
@@ -114,7 +114,9 @@ Ecosystems: **npm · PyPI · Go modules · crates.io**
 | `go.sum` | yes | yes |
 | `Cargo.lock`, `poetry.lock`, `uv.lock` | yes | yes |
 | `Gemfile.lock` | yes | yes |
+| `packages.lock.json` | yes | yes |
 | `package.json`, `requirements.txt`, `pyproject.toml`, `go.mod`, `Cargo.toml` | direct only | yes |
+| `.csproj`, `Directory.Packages.props`, `packages.config` | direct only | yes |
 
 Problem licenses usually arrive as a dependency of a dependency, not as something you added on purpose — so the lockfile path is the one that matters. `package-lock.json` v2/v3 embeds a license for every entry, which means a full transitive audit with **zero network lookups** and the exact versions that will actually be installed.
 

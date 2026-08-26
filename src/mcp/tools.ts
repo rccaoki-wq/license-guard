@@ -5,9 +5,7 @@ import { scan, withProvenanceNote } from '../scan';
 import { findLicense } from '../seo/catalog';
 import { SITE_ORIGIN } from '../ui/layout';
 import { packagePath } from '../ui/pkg';
-import type { DistributionModel, Ecosystem, Linkage, Scope } from '../types';
-
-const ECOSYSTEMS: readonly Ecosystem[] = ['npm', 'pypi', 'go', 'cargo', 'rubygems'];
+import { ECOSYSTEMS, type DistributionModel, type Ecosystem, type Linkage, type Scope } from '../types';
 const MODELS: readonly DistributionModel[] = [
   'saas',
   'distributed-binary',
@@ -23,6 +21,7 @@ const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
   go: 'static',
   cargo: 'static',
   rubygems: 'dynamic',
+  nuget: 'dynamic',
 };
 
 const DISCLAIMER =
@@ -90,7 +89,9 @@ export const TOOL_DEFINITIONS = [
       properties: {
         ecosystem: {
           type: 'string',
-          enum: ['npm', 'pypi', 'go', 'cargo'],
+          // 手書きしない。ここが古いままだと、対応済みのエコシステムが
+          // MCP の入口で弾かれる（rubygems が実際にそうなっていた）
+          enum: [...ECOSYSTEMS],
           description: 'Package registry the dependency comes from.',
         },
         name: {
@@ -152,7 +153,7 @@ export const TOOL_DEFINITIONS = [
         content: {
           type: 'string',
           description:
-            'Full text of a lockfile or manifest. Accepted: package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, uv.lock, Gemfile.lock, package.json, requirements.txt, go.mod, Cargo.toml. The format is detected automatically. Prefer a lockfile: it covers transitive dependencies and carries exact versions. package-lock.json is best of all, since it embeds licenses and needs no registry lookups.',
+            'Full text of a lockfile or manifest. Accepted: package-lock.json, pnpm-lock.yaml, yarn.lock, go.sum, Cargo.lock, poetry.lock, uv.lock, Gemfile.lock, packages.lock.json, package.json, requirements.txt, go.mod, Cargo.toml, .csproj, Directory.Packages.props, packages.config. The format is detected automatically. Prefer a lockfile: it covers transitive dependencies and carries exact versions. package-lock.json is best of all, since it embeds licenses and needs no registry lookups.',
         },
         distribution_model: {
           type: 'string',

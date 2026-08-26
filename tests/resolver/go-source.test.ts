@@ -52,7 +52,14 @@ describe('resolvedFrom への持ち上げ', () => {
 
   function withGo(lookup: Awaited<ReturnType<Fetchers['go']>>): Fetchers {
     const nope = async () => ({ spdx: null });
-    return { npm: nope, pypi: nope, cargo: nope, rubygems: nope, go: async () => lookup };
+    return {
+      npm: nope,
+      pypi: nope,
+      cargo: nope,
+      rubygems: nope,
+      nuget: nope,
+      go: async () => lookup,
+    };
   }
 
   it('deps.dev 由来は deps-dev として出る', async () => {

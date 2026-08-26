@@ -18,6 +18,7 @@ export const ECOSYSTEM_LABEL: Record<Ecosystem, string> = {
   go: 'Go module',
   cargo: 'Rust crate',
   rubygems: 'Ruby gem',
+  nuget: 'NuGet package',
 };
 
 const MANIFEST_NAME: Record<Ecosystem, string> = {
@@ -26,6 +27,7 @@ const MANIFEST_NAME: Record<Ecosystem, string> = {
   go: 'go.sum',
   cargo: 'Cargo.lock',
   rubygems: 'Gemfile.lock',
+  nuget: 'packages.lock.json',
 };
 
 /** Go / Rust は静的リンクが既定 */
@@ -35,6 +37,7 @@ export const DEFAULT_LINKAGE: Record<Ecosystem, Linkage> = {
   go: 'static',
   cargo: 'static',
   rubygems: 'dynamic',
+  nuget: 'dynamic',
 };
 
 export interface PackagePageInput {

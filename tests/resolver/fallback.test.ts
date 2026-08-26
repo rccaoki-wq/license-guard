@@ -56,6 +56,7 @@ describe('LicenseResolver の出所表示', () => {
       go: async () => ({ spdx: null }),
       cargo: async () => ({ spdx: null }),
       rubygems: async () => ({ spdx: null }),
+      nuget: async () => ({ spdx: null }),
     });
     expect(await r.resolve(dep())).toEqual({ spdx: 'MIT', resolvedFrom: 'registry-latest' });
   });
@@ -67,6 +68,7 @@ describe('LicenseResolver の出所表示', () => {
       go: async () => ({ spdx: null }),
       cargo: async () => ({ spdx: null }),
       rubygems: async () => ({ spdx: null }),
+      nuget: async () => ({ spdx: null }),
     });
     expect(await r.resolve(dep())).toEqual({ spdx: 'MIT', resolvedFrom: 'registry' });
   });
@@ -87,6 +89,7 @@ describe('LicenseResolver の出所表示', () => {
       go: async () => ({ spdx: null }),
       cargo: async () => ({ spdx: null }),
       rubygems: async () => ({ spdx: null }),
+      nuget: async () => ({ spdx: null }),
     });
 
     await r.resolve(dep());

@@ -64,6 +64,7 @@ describe('公開レジストリに無いと分かっている依存を照会し�
         return { spdx: 'MIT' };
       },
       rubygems: async () => ({ spdx: null }),
+      nuget: async () => ({ spdx: null }),
     };
 
     const r = await scan(CARGO, 'saas', noopCache, fetchers);
@@ -80,6 +81,7 @@ describe('公開レジストリに無いと分かっている依存を照会し�
       go: async () => ({ spdx: null }),
       cargo: async () => ({ spdx: 'MIT' }),
       rubygems: async () => ({ spdx: 'MIT' }),
+      nuget: async () => ({ spdx: null }),
     };
     const r = await scan(CARGO, 'saas', noopCache, fetchers);
 
