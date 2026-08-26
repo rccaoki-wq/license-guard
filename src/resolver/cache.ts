@@ -23,6 +23,30 @@ interface CacheRow {
 export const LATEST_FALLBACK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
+ * 劣後する情報源から得た答えの有効期限。
+ *
+ * **キャッシュの鍵に情報源が入っていない。**だから情報源の優先順位が効くのは
+ * 最初に書き込む 1 回だけで、以降は誰が答えたかに関わらずその行が返り続ける。
+ * 「固定版のライセンスは不変だから恒久で良い」は上流の事実については正しいが、
+ * **どの情報源から読んだかを無視している**。
+ *
+ * Go は deps.dev を先に引き、答えなかったときだけ ClearlyDefined に落とす
+ * （go.ts の測定: deps.dev 98〜100% / ClearlyDefined 38%）。落ちる理由の多くは
+ * 大きい go.mod を流したときの上流の一時的な失敗で、**次に聞けば deps.dev が
+ * 答える**。実測（2026-08-26、キャッシュ上の ClearlyDefined 由来 102 座標）では
+ * 100 件を deps.dev が答え、うち 3 件は義務を**過少に**述べていた:
+ *
+ *     aws-sdk-go@v1.34.0      Apache-2.0 → Apache-2.0 AND BSD-3-Clause
+ *     aws-sdk-go-v2@v1.11.0   Apache-2.0 → Apache-2.0 AND BSD-3-Clause
+ *     microsoft-authentication-extensions-for-go/cache@v0.1.1
+ *                             MIT        → BSD-3-Clause AND MIT
+ *
+ * 一時的に届かなかっただけの答えを恒久にすると、**緩い側の誤りが永久に残る**。
+ * 期限を付けて、優先する情報源にもう一度機会を与える。
+ */
+export const FALLBACK_SOURCE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
  * 解決の規則を直した時刻。**ここより前に保存された答えは、直す前の規則で
  * 得たもの**なので使わない。
  *
@@ -36,9 +60,10 @@ export const LATEST_FALLBACK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * 足す。該当する情報源の行だけが読み捨てられ、次の照会で新しい規則を通る。
  * 情報源ごとに分けてあるのは、関係の無い行まで捨てて上流を叩き直さないため。
  *
- * **必要なのは期限を持たない情報源だけ。**`registry-latest` のように
- * 7 日で切れる行は放っておいても新しい規則を通り直す。ここに足すと、
- * 期限内かどうかの判定と二重になって読みにくくなるだけ。
+ * **期限とは別の話。**期限は「その答えが古くなったか」を見るが、epoch は
+ * 「その答えが直す前の規則で得たものか」を見る。期限だけに任せると、直した
+ * 誤答をその期限のあいだ配り続ける。誤りの修正は今届かなければ意味がないので
+ * 両方掛ける。逆に、規則を直していない情報源にはここに何も置かない。
  */
 export const RULE_EPOCH_MS: Readonly<Record<string, number>> = {
   // ClearlyDefined の記録から LicenseRef-scancode を落とすようにした。
@@ -73,16 +98,32 @@ export function cacheKey(ecosystem: string, name: string, version: string): stri
 const BATCH_SIZE = 90;
 
 /**
- * 情報源が不変か（そのバージョン自身の宣言に基づくか）。
+ * その情報源の答えをどれだけの間そのまま使ってよいか。null は無期限。
  *
- * `repo-license` は既定ブランチの現在の LICENSE を読んだもので、
- * 再ライセンスされればその日から答えが変わる。今は版が null の問いにしか
- * 使われず put も走らないが、**「版に紐づく事実」ではない点は同じ**なので
- * ここで先に不変から外しておく。後で経路が増えたときに、
- * 古い答えを恒久に返す形にはならない。
+ * 期限が要る理由は 2 通りあり、どちらも「上流の事実」ではなく
+ * **その行の出所**に由来する。
  */
-function isImmutableSource(source: string): boolean {
-  return source !== 'registry-latest' && source !== 'repo-license';
+function ttlFor(source: string): number | null {
+  // 可変: そのバージョン自身の宣言ではない。`repo-license` は既定ブランチの
+  // 現在の LICENSE を読んだもので、再ライセンスされればその日から答えが変わる。
+  // 今は版が null の問いにしか使われず put も走らないが、「版に紐づく事実」で
+  // ない点は同じなので先に外しておく
+  if (source === 'registry-latest' || source === 'repo-license') return LATEST_FALLBACK_TTL_MS;
+  // 劣後: 優先する情報源が一時的に届かなかっただけかもしれない。
+  // ClearlyDefined は Go でも NuGet でも最後の手段で、先頭に置く経路が無い
+  if (source === 'clearlydefined') return FALLBACK_SOURCE_TTL_MS;
+  return null;
+}
+
+/** その行を今そのまま使ってよいか。get と getMany で判定を分けない */
+function isStale(source: string, resolvedAt: number | null): boolean {
+  if (isPreRuleChange(source, resolvedAt)) return true;
+
+  const ttl = ttlFor(source);
+  if (ttl === null) return false;
+  // 期限を判定できない行は使わない。古い可能性を無視するより再取得する方が安全
+  if (typeof resolvedAt !== 'number') return true;
+  return Date.now() - resolvedAt > ttl;
 }
 
 /**
@@ -105,13 +146,7 @@ export class LicenseCache {
 
     if (!row) return null;
 
-    if (isPreRuleChange(row.source, row.resolved_at)) return null;
-
-    if (!isImmutableSource(row.source)) {
-      // 期限を判定できない行は使わない。古い可能性を無視するより再取得する方が安全
-      if (typeof row.resolved_at !== 'number') return null;
-      if (Date.now() - row.resolved_at > LATEST_FALLBACK_TTL_MS) return null;
-    }
+    if (isStale(row.source, row.resolved_at)) return null;
 
     return { spdx: row.spdx, source: row.source };
   }
@@ -153,11 +188,7 @@ export class LicenseCache {
             .all<CacheRow & { ecosystem: string; package: string; version: string }>();
 
           for (const row of res.results ?? []) {
-            if (isPreRuleChange(row.source, row.resolved_at)) continue;
-            if (!isImmutableSource(row.source)) {
-              if (typeof row.resolved_at !== 'number') continue;
-              if (Date.now() - row.resolved_at > LATEST_FALLBACK_TTL_MS) continue;
-            }
+            if (isStale(row.source, row.resolved_at)) continue;
             found.set(cacheKey(row.ecosystem, row.package, row.version), {
               spdx: row.spdx,
               source: row.source,
