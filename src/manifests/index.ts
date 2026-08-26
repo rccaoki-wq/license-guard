@@ -10,7 +10,7 @@ import { isRequirementsTxt, parseRequirementsTxt } from './pypi';
 import { isGemfileLock, parseGemfileLock } from './gemfile-lock';
 import { isNugetPackagesLock, parseNugetPackagesLock } from './nuget-lock';
 import { isNugetProject, parseNugetProject } from './nuget-project';
-import { parseGoMod } from './gomod';
+import { isGoMod, parseGoMod } from './gomod';
 import { isCycloneDx, isSpdxJson, parseCycloneDx, parseSpdxJson, type SbomParse } from './sbom';
 import type { Dependency, Ecosystem, InputEcosystem } from '../types';
 
@@ -261,7 +261,7 @@ export function detectAndParse(content: string): ParsedManifest {
     // `<PackageVersion>` / `<package id=>` の実在だけを見る。
     // .csproj は推移的依存を持たない——実際に入る版は restore が決める
     result = { ecosystem: 'nuget', dependencies: parseNugetProject(trimmed), transitive: false };
-  } else if (/^module\s+\S+/m.test(trimmed) || /^require\s*\(/m.test(trimmed)) {
+  } else if (isGoMod(trimmed)) {
     result = { ecosystem: 'go', dependencies: parseGoMod(trimmed), transitive: false };
   } else if (isGoSum(trimmed)) {
     result = { ecosystem: 'go', dependencies: parseGoSum(trimmed), transitive: true };
