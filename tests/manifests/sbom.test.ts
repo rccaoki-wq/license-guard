@@ -612,6 +612,85 @@ describe('detectAndParse による取り込み', () => {
     expect(note).toContain('no version is shown');
   });
 
+  /**
+   * **「対応していない」と「そもそも出荷物に入らない」は別の理由。**
+   * GitHub Actions は workflow の中で走るだけなので、落とすのが正しい。
+   * 道具の穴の一覧に混ぜると、直しようのない不足のように読める。
+   * 実測 5 文書 194 成分のうち 52 件（27%）がこれ
+   */
+  it('CI でしか動かない成分は、対応外の一覧に混ぜない', () => {
+    const parsed = detectAndParse(
+      cdx({
+        components: [
+          { purl: 'pkg:npm/a@1.0.0' },
+          { purl: 'pkg:githubactions/actions/checkout@4.1.1' },
+          { purl: 'pkg:githubactions/actions/setup-node@4.0.0' },
+        ],
+      }),
+    );
+    const note = parsed.notes?.find((n) => n.includes('GitHub Action'))!;
+    expect(note).toContain('2 components are GitHub Actions');
+    expect(note).toContain('not in what you ship');
+    expect(note).not.toContain('does not cover');
+    expect(parsed.notes?.some((n) => n.includes('does not cover'))).toBe(false);
+  });
+
+  it('1 件なら単数で書く', () => {
+    const parsed = detectAndParse(
+      cdx({
+        components: [
+          { purl: 'pkg:npm/a@1.0.0' },
+          { purl: 'pkg:githubactions/actions/checkout@4.1.1' },
+        ],
+      }),
+    );
+    const note = parsed.notes?.find((n) => n.includes('GitHub Action'))!;
+    expect(note).toContain('1 component is a GitHub Action.');
+    expect(note).toContain('It runs in your CI');
+  });
+
+  it('CI 専用と対応外が同居すれば、別々の理由で 2 本出す', () => {
+    const parsed = detectAndParse(
+      cdx({
+        components: [
+          { purl: 'pkg:npm/a@1.0.0' },
+          { purl: 'pkg:githubactions/actions/checkout@4.1.1' },
+          { purl: 'pkg:maven/org.apache/commons-lang3@3.14.0' },
+          { purl: 'pkg:maven/org.slf4j/slf4j-api@2.0.12' },
+        ],
+      }),
+    );
+    const ci = parsed.notes?.find((n) => n.includes('GitHub Action'))!;
+    const unsupported = parsed.notes?.find((n) => n.includes('does not cover'))!;
+    expect(ci).toContain('1 component is a GitHub Action.');
+    expect(unsupported).toContain('2 components were left out');
+    expect(unsupported).toContain('maven (2)');
+    expect(unsupported).not.toContain('githubactions');
+  });
+
+  /**
+   * 実測: gorilla/mux の SBOM は 7 件すべて githubactions。
+   * **理由を取り違えると、直しようのない指示になる**——別の走査器を
+   * 探しても、この文書には出荷物が 1 件も入っていない
+   */
+  it('全部が CI 専用なら、対応の話ではなく出荷物の話をして落とす', () => {
+    expect(() =>
+      detectAndParse(
+        cdx({
+          components: [
+            { purl: 'pkg:githubactions/actions/checkout@4.1.1' },
+            { purl: 'pkg:githubactions/actions/setup-go@5.0.0' },
+          ],
+        }),
+      ),
+    ).toThrow(/every component in it runs in CI rather than shipping in your artifact/);
+    expect(() =>
+      detectAndParse(
+        cdx({ components: [{ purl: 'pkg:githubactions/actions/checkout@4.1.1' }] }),
+      ),
+    ).not.toThrow(/Supported package types/);
+  });
+
   it('版が固定されていれば範囲の注記は出ない', () => {
     const parsed = detectAndParse(cdx({ components: [{ purl: 'pkg:npm/a@1.0.0' }] }));
     expect(parsed.notes?.some((n) => n.includes('version range'))).toBe(false);

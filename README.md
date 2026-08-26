@@ -141,7 +141,9 @@ Two things about real SBOMs are reported rather than smoothed over, because both
 
 **A version range is not a version.** GitHub's dependency-graph export writes the manifest range — `^2.0.0`, `>= 0.2.42,< 0.3.0` — into the purl *and* the version field: 36 of 44 components in `express`, 50 of 51 in `tokio`. There is no release under that string, so a scanner that passes it through resolves against the latest release while displaying a version that is not in your artifact. Ranges are not accepted as versions, and the result says how many components were affected. A lockfile does not have this problem, which is the practical reason to prefer one.
 
-Components whose `purl` type is outside the six supported ecosystems are counted and named rather than dropped — in practice the largest such bucket is `githubactions` (9 in `express`, 16 in `tokio`). A document where *nothing* is checkable is rejected with the reason, not returned as an empty clean report: `gorilla/mux`'s SBOM is 100% `githubactions` and fails this way.
+Components that are left out are counted and named rather than dropped, and the reason matters more than the count. **GitHub Actions are not a gap.** They run in CI, never enter the artifact, and so cannot create a distribution or network obligation — which is why they are excluded, and the result says exactly that instead of filing them under "unsupported". This is the difference between a fact about your software and a limitation of the tool, and it is not a rounding error: 52 of the 194 components across those five SBOMs are `githubactions`, the second-largest type after `cargo`. Package types the scan genuinely cannot read (`maven`, `deb`, …) are reported separately.
+
+A document where *nothing* is checkable is rejected with the reason, not returned as an empty clean report — and the two reasons differ. `gorilla/mux`'s SBOM is 100% GitHub Actions, so the answer is that the document contains nothing you ship; looking for a different scanner will not change that.
 
 ## Status
 

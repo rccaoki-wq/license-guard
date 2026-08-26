@@ -104,6 +104,23 @@ function unwrapSbom(doc: unknown): unknown {
   return isCycloneDx(inner) || isSpdxJson(inner) ? inner : doc;
 }
 
+/**
+ * CI の中でしか動かない purl type と、その呼び名。
+ *
+ * **落とすのが正しいので、対応していない type の一覧に混ぜない。**
+ * GitHub Actions は workflow の中で走るだけで、成果物に入らない。
+ * 配布もネットワーク越しの提供も起きないので、ライセンスが出荷の
+ * 義務を生むことがない。それを「この検査は対応していません」と
+ * 書くと、道具の穴のように読めるが、穴ではない。
+ *
+ * 数の話でもある。実測した 5 つの SBOM 194 成分のうち 52 件——
+ * **全体の 27%、cargo に次ぐ 2 番目**——が githubactions だった。
+ * 一番大きい除外の理由を取り違えたまま出すことになる
+ */
+const BUILD_ONLY: Record<string, string> = {
+  githubactions: 'GitHub Action',
+};
+
 /** 「maven (38), deb (3)」——多い順。件数が同じなら名前順で安定させる */
 function describeSkipped(skipped: Map<string, number>): string {
   return [...skipped.entries()]
@@ -123,7 +140,8 @@ function describeSkipped(skipped: Map<string, number>): string {
  * 二つ目は落とした成分。対応外の purl type（maven, deb, composer …）は
  * 依存の一覧に痕跡を残さないので、件数を数えて notes に載せる。
  * 載せなければ、Maven 中心の SBOM が「npm の依存 3 件、問題なし」という
- * 検査済みの顔で返る。
+ * 検査済みの顔で返る。**ただし「対応していない」と「そもそも出荷物に
+ * 入らない」は別の理由**なので、混ぜずに 2 本に分ける。
  *
  * 三つ目は版が固定されていなかったこと。`^2.0.0` のような範囲は版では
  * ないので落とすが、落とした結果は「版の欄が空」としか見えない。
@@ -134,10 +152,30 @@ function fromSbom(parsed: SbomParse, format: 'CycloneDX' | 'SPDX'): ParsedManife
   const systems = new Set(parsed.dependencies.map((d) => d.ecosystem));
   const notes: string[] = [];
 
-  if (parsed.skipped.size > 0) {
-    const total = [...parsed.skipped.values()].reduce((a, b) => a + b, 0);
+  // 「CI でしか動かないので出荷物に入らない」と「この検査が対応していない」は
+  // 別の事実。同じ文に混ぜると、正しい除外まで道具の穴として読まれる
+  const buildOnly = new Map<string, number>();
+  const unsupported = new Map<string, number>();
+  for (const [type, n] of parsed.skipped) {
+    (BUILD_ONLY[type] === undefined ? unsupported : buildOnly).set(type, n);
+  }
+
+  if (buildOnly.size > 0) {
+    const total = [...buildOnly.values()].reduce((a, b) => a + b, 0);
+    const one = total === 1;
+    const names = [...buildOnly.keys()]
+      .sort()
+      .map((t) => `${BUILD_ONLY[t]!}${one ? '' : 's'}`)
+      .join(' and ');
     notes.push(
-      `${total === 1 ? '1 component was' : `${total} components were`} left out because this scan does not cover ${total === 1 ? 'its package type' : 'their package types'}: ${describeSkipped(parsed.skipped)}. They are not counted anywhere in this result.`,
+      `${one ? '1 component is a' : `${total} components are`} ${names}. ${one ? 'It runs' : 'They run'} in your CI, not in what you ship, so ${one ? 'its license cannot' : 'their licenses cannot'} create a distribution or network obligation for you. That is why ${one ? 'it is' : 'they are'} left out — not because this scan cannot read ${one ? 'it' : 'them'}.`,
+    );
+  }
+
+  if (unsupported.size > 0) {
+    const total = [...unsupported.values()].reduce((a, b) => a + b, 0);
+    notes.push(
+      `${total === 1 ? '1 component was' : `${total} components were`} left out because this scan does not cover ${total === 1 ? 'its package type' : 'their package types'}: ${describeSkipped(unsupported)}. They are not counted anywhere in this result.`,
     );
   }
 
@@ -152,6 +190,15 @@ function fromSbom(parsed: SbomParse, format: 'CycloneDX' | 'SPDX'): ParsedManife
   }
 
   if (parsed.dependencies.length === 0) {
+    // **理由を取り違えると、直しようのない指示を出すことになる。**
+    // 全部が GitHub Actions なら、この文書には出荷物が 1 件も
+    // 入っていない——別の走査器を探しても同じ結果になる。実測では
+    // gorilla/mux の SBOM がこの形（7 件すべて githubactions）
+    if (unsupported.size === 0 && buildOnly.size > 0) {
+      throw new Error(
+        `This is a ${format} document, but every component in it runs in CI rather than shipping in your artifact: ${describeSkipped(buildOnly)}. Nothing here can create a license obligation for the way you ship. Scan the lockfile or an SBOM of the built artifact instead.`,
+      );
+    }
     const detail =
       parsed.skipped.size === 0
         ? 'It lists no components.'
