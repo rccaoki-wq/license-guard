@@ -34,6 +34,9 @@ export function classifyPath(pathname: string): string {
   if (p === '/licenses') return 'licenses';
   if (p === '/compare') return 'compare-index';
   if (p === '/packages') return 'packages';
+  // **`other` に混ぜてはいけない。**値段のページに何人届いたかが、
+  // 依頼 0 件を「見られていない」と「見られて断られた」に分ける唯一の分母
+  if (p === '/audit') return 'audit';
 
   // 比較ページのスラッグは自前で作った有限集合なのでそのまま残す
   const cmp = /^\/compare\/([a-z0-9.+-]+-vs-[a-z0-9.+-]+)$/.exec(p);

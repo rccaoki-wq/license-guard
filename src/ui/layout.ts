@@ -236,6 +236,41 @@ export function collectionJsonLd(o: {
 }
 
 /**
+ * 有料役務用（Service + Offer）。
+ *
+ * 無料ツールの構造化データ（softwareAppJsonLd）は `price: 0` を出している。
+ * **同じサイトで有料の役務を出すなら、別の型で別に出す必要がある。**
+ * 片方しか無いと、取得側はサイト全体を「無料のツール」に分類し、
+ * 買えるものがあること自体が候補に入らない。
+ *
+ * 価格は呼び出し側から受け取る。ここに数値を書くと、掲示と構造化データが
+ * 別々に持つ 2 つの真実になり、**片方だけ古い値のまま外へ配られる**。
+ */
+export function serviceJsonLd(o: {
+  name: string;
+  description: string;
+  path: string;
+  priceUsd: number;
+}): string {
+  return jsonLdBlock({
+    '@context': 'https://schema.org',
+    '@type': 'Service',
+    name: o.name,
+    description: o.description,
+    url: SITE_ORIGIN + o.path,
+    serviceType: 'Open source license compliance audit',
+    provider: { '@type': 'Organization', name: 'LicenseGuard', url: SITE_ORIGIN + '/' },
+    areaServed: 'Worldwide',
+    offers: {
+      '@type': 'Offer',
+      price: String(o.priceUsd),
+      priceCurrency: 'USD',
+      url: SITE_ORIGIN + o.path,
+    },
+  });
+}
+
+/**
  * 到達ビーコン。**すべてのページに入れる。**
  *
  * 以前はツールページ用の `script` に相乗りしていたので、渡していた
@@ -309,6 +344,12 @@ ${o.jsonLd ?? ''}
     <a href="/licenses">Licenses</a>
     <a href="/compare">Compare</a>
     <a href="/packages">Packages</a>
+    <!-- **買える口は全ページに置く。**以前は $199 の CTA が結果画面の下にしか
+         無く、スキャンを実行しなければ到達できなかった。実利用者のスキャンは
+         6 日間 0 件だったので、値段はどこにも書かれていないのと同じだった。
+         到達の大半は 874 枚のカタログページに落ちるので、そこから 1 クリックで
+         届かなければ、書いていないのと変わらない -->
+    <a href="/audit">Get an audit</a>
   </nav>
 </div>
 ${o.body}

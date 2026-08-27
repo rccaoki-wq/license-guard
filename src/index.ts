@@ -4,6 +4,7 @@ import { renderLicenseIndex, renderLicensePage } from './ui/license';
 import { findPair, renderCompareIndex, renderComparePage } from './ui/compare';
 import { renderPackageNotFound, renderPackagePage } from './ui/pkg';
 import { renderPackageIndex } from './ui/packages';
+import { renderAuditPage } from './ui/audit';
 import { scan, withProvenanceNote } from './scan';
 import { LicenseCache } from './resolver/cache';
 import { LicenseResolver } from './resolver';
@@ -126,7 +127,12 @@ function safeDecode(v: string): string | null {
   }
 }
 
-const TRACKED_EVENTS = new Set([
+/**
+ * 受け付ける事象名。**ここに無い名前は黙って捨てられる。**
+ * ページ側が送っていて集合に無いと、例外も 4xx も出ないまま
+ * その事象だけが永久に 0 件になる（テストで突き合わせている）
+ */
+export const TRACKED_EVENTS = new Set([
   // 到達。これが無いと「誰も来ていない」と「来たが何もせず帰った」を
   // 区別できず、流入を作るべきか入口を直すべきか判断できない
   'landed',
@@ -136,6 +142,9 @@ const TRACKED_EVENTS = new Set([
   'scan_failed',
   'cta_paid_report_clicked',
   'cta_email_submitted',
+  // 有料監査の依頼。**これが唯一の売上に直結する事象。**到達（landed）は
+  // /audit も含めて数えられるので、分母は既にある
+  'audit_request_submitted',
 ]);
 
 /** SEO ページはエッジで長めにキャッシュする */
@@ -315,6 +324,12 @@ app.get('/api/pkg/:ecosystem/*', (c) => {
 
 app.get('/licenses', (c) =>
   c.html(renderLicenseIndex(), 200, { 'cache-control': SEO_CACHE }),
+);
+
+// 有料監査の提示。**エッジで長く持たせない。**値段と条件のページなので、
+// 直したものが配られるまでに一日かかると、その間ずっと古い金額を提示し続ける
+app.get('/audit', (c) =>
+  c.html(renderAuditPage(), 200, { 'cache-control': 'public, max-age=300' }),
 );
 
 // 比較ページ。「AGPL と GPL は何が違うのか」が問いの自然な形なので、
@@ -511,6 +526,65 @@ app.post('/api/interest', async (c) => {
         str(body.verdictMix, 64),
         str(body.distributionModel, 32),
         str(body.note, 500),
+        isSyntheticRequest(c.req.raw.headers) ? 1 : 0,
+        Date.now(),
+      )
+      .run();
+  } catch {
+    return c.json({ error: 'Could not record that right now. Please try again later.' }, 503);
+  }
+
+  return c.json({ ok: true });
+});
+
+/**
+ * 有料監査の依頼受付。
+ *
+ * **interest_signals と分ける。**あちらはメールを鍵に畳む関心表明で、
+ * 同じ人の 2 通目が 1 通目を上書きする。依頼でそれをやると、
+ * 同じ会社の別案件が黙って消える。
+ *
+ * **マニフェスト本文は受け取らない。**「貼ったものは保存しない」と
+ * トップに書いてある以上、金を受け取る口だけ例外にはできない。
+ * 依存の一覧は、やり取りが始まってから直接もらえばよい。
+ */
+app.post('/api/audit-request', async (c) => {
+  const limited = await enforceRateLimit(c.env.API_LIMITER, c.req.raw);
+  if (limited) return limited;
+
+  let body: {
+    email?: unknown;
+    company?: unknown;
+    distributionModel?: unknown;
+    scope?: unknown;
+    note?: unknown;
+  };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Request body is not valid JSON.' }, 400);
+  }
+
+  const raw = typeof body.email === 'string' ? body.email : '';
+  if (!isPlausibleEmail(raw)) {
+    return c.json({ error: 'That does not look like an email address.' }, 400);
+  }
+
+  const str = (v: unknown, max: number) =>
+    typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, max) : null;
+
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO audit_requests
+         (email, company, distribution_model, scope, note, synthetic, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        normalizeEmail(raw),
+        str(body.company, 200),
+        str(body.distributionModel, 32),
+        str(body.scope, 500),
+        str(body.note, 2000),
         isSyntheticRequest(c.req.raw.headers) ? 1 : 0,
         Date.now(),
       )

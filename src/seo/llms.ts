@@ -73,5 +73,6 @@ ${COMPARE_PAIRS.map((c) => `- [${c.a} vs ${c.b}](${SITE_ORIGIN}${comparePath(c)}
 - [Comparison index](${SITE_ORIGIN}/compare)
 - [Packages with obligations](${SITE_ORIGIN}/packages)
 - [Interactive scanner](${SITE_ORIGIN}/)
+- [Paid pre-delivery audit](${SITE_ORIGIN}/audit): a written audit of a whole repository, done by a person
 `;
 }
